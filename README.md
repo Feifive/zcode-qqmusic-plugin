@@ -4,6 +4,26 @@
 
 [下载安装器](https://github.com/Feifive/zcode-qqmusic-plugin/releases/latest) · [安装说明](INSTALL-OTHER-MAC.md)
 
+## 产品截图
+
+以下截图来自 ZCode macOS 3.15.3 中实际运行的插件 0.3.7。
+
+**同步歌词与副歌标记** — 歌词融入聊天输入框上方，小竖标提示副歌起点，配色跟随当前专辑。
+
+![ZCode 输入框上方的专辑封面、同步歌词、数字进度与副歌标记](docs/images/lyrics-and-refrain.png)
+
+**播放控制** — 悬停或键盘聚焦时显示上一首、播放 / 暂停和下一首，进度条支持点击与拖动。
+
+![歌词条显示上一首、暂停和下一首控制按钮](docs/images/playback-controls.png)
+
+| 跟随专辑色 | 跟随 ZCode 主题色 |
+| --- | --- |
+| ![专辑色模式下的歌词设置面板](docs/images/settings-album.png) | ![ZCode 主题色模式下的歌词设置面板](docs/images/settings-theme.png) |
+
+**封面预览** — 悬停或聚焦小封面约 2 秒，在上方展开原尺寸封面大图。
+
+![小专辑封面上方展开的原尺寸封面预览](docs/images/cover-preview.png)
+
 ## 安装和升级
 
 退出 ZCode，解压并双击 **ZCode Music Installer.app**，点击「安装 / 修复」。支持 Apple Silicon 与 Intel，无需另外安装 Node.js、npm 或编译工具。
