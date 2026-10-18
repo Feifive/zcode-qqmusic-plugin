@@ -1,0 +1,33 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>封面缩略对照检查</title>
+<style>body{font:15px system-ui;background:#fafafa;color:#333;margin:40px;max-width:1100px}button{padding:8px 16px;cursor:pointer}.samples{display:flex;gap:36px;align-items:flex-start;margin:30px 0}.sample{width:300px}.sample canvas{width:100px;height:100px;image-rendering:pixelated;border-radius:6px}.sample img{width:150px;height:150px;border-radius:8px}.swatch{height:12px;border-radius:6px;margin:14px 0}output{display:block;font:13px ui-monospace,monospace;white-space:pre-wrap;line-height:1.7}h2{font-size:17px}</style>
+<h1>封面缩略对照检查</h1><p>同一张 300×300 封面、同一套取色与配色规则，仅比较 10×10 缩略方式。</p>
+<button id="run">运行检查</button><p id="result">等待检查</p>
+<div class="samples"><section class="sample"><h2>《晴天》封面</h2><img id="source" src="fixtures/qingtian.jpg" alt="晴天专辑封面"><p>全尺寸解码后进行比较。</p></section><section class="sample"><h2>单步缩略（浏览器对照）</h2><canvas id="single" width="10" height="10"></canvas><div class="swatch" id="old-swatch"></div><output id="old-result"></output></section><section class="sample"><h2>区域平均（修复后）</h2><canvas id="box" width="10" height="10"></canvas><div class="swatch" id="new-swatch"></div><output id="new-result"></output></section></div>
+<script type="module">
+import {boxAverage} from '../plugin/lib/resampling.js'
+import {extractMagicColors,paletteForArtwork,rgbToHSB,hueBucket} from '../plugin/lib/colors.js'
+const $=selector=>document.querySelector(selector)
+const describe=pixels=>{
+ const colors=extractMagicColors(pixels,{order:'rgba'}),accent=paletteForArtwork(colors).accent,buckets=Array(8).fill(0)
+ for(let i=0;i<pixels.length;i+=4){const c=rgbToHSB(...pixels.slice(i,i+3));if(c.b*100>=12&&c.s*100>11)buckets[hueBucket(c.h)]++}
+ return{accent,primaryHue:colors.magicColors[0]?.h,buckets}
+}
+$('#run').onclick=async()=>{
+ try{
+  const image=$('#source');await image.decode()
+  const full=document.createElement('canvas');full.width=image.naturalWidth;full.height=image.naturalHeight
+  const context=full.getContext('2d',{willReadFrequently:true});context.drawImage(image,0,0)
+  const raw=context.getImageData(0,0,full.width,full.height).data,pixels=boxAverage(raw,full.width,full.height)
+  const single=$('#single').getContext('2d',{willReadFrequently:true});single.imageSmoothingQuality='high';single.drawImage(image,0,0,10,10)
+  $('#box').getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(pixels),10,10),0,0)
+  const old=describe(single.getImageData(0,0,10,10).data),current=describe(pixels)
+  $('#old-swatch').style.background=old.accent;$('#new-swatch').style.background=current.accent
+  $('#old-result').textContent=JSON.stringify(old,null,2);$('#new-result').textContent=JSON.stringify(current,null,2)
+  if(current.accent!=='#2DBADE')throw Error('晴天未命中蓝色配色')
+  if(hueBucket(current.primaryHue)!==4)throw Error('首选色相未落在青色区间')
+  context.fillStyle='rgb(153,61,61)';context.fillRect(0,0,full.width,full.height)
+  if(describe(boxAverage(context.getImageData(0,0,full.width,full.height).data,full.width,full.height)).accent!=='#F3616F')throw Error('红色对照样本发生变化')
+  $('#result').textContent='PASS 3 checks · 晴天蓝色 #2DBADE · 青色组优先 · 红色对照保持 #F3616F'
+ }catch(error){$('#result').textContent='FAIL '+error.message}
+}
+</script></html>

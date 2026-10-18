@@ -1,8 +1,8 @@
 # 在另一台 Mac 安装
 
-当前版本 0.3.2，适配官方 ZCode macOS **3.15.3**。Apple Silicon 和 Intel 共用一个安装器。
+当前版本 0.3.3，适配官方 ZCode macOS **3.15.3**。Apple Silicon 和 Intel 共用一个安装器。
 
-1. 从 [Releases](https://github.com/Feifive/zcode-qqmusic-plugin/releases/latest) 下载 `ZCode-Music-Installer-0.3.2-macOS.zip` 并解压。
+1. 从 [Releases](https://github.com/Feifive/zcode-qqmusic-plugin/releases/latest) 下载 `ZCode-Music-Installer-0.3.3-macOS.zip` 并解压。
 2. 完全退出 ZCode（⌘Q）。
 3. 双击 `ZCode Music Installer.app`，选择「安装 / 修复」。应用不在 `/Applications` 时按提示选择。
 4. 安装完成后点击「打开 ZCode」，播放 QQ 音乐即可。点击输入框上方最右侧固定的 ♪ 打开歌词设置。
@@ -41,7 +41,7 @@ ZCode **官方升级**可能覆盖加载器。重新运行适配新版本的安�
 
 ```sh
 npm test
-# 已存在 release/zcode-music-0.3.2.json 时，无需私钥即可打包安装器
+# 已存在 release/zcode-music-0.3.3.json 时，无需私钥即可打包安装器
 npm run pack:installer
 # 从当前源码生成新的签名发布包，需要原发布私钥
 npm run release

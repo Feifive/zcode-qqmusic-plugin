@@ -28,7 +28,9 @@ export function createPaletteReader({decode,fetchImage=fetchArtwork,now=Date.now
     if(cache.size>64)cache.delete(cache.keys().next().value)
     Promise.resolve().then(()=>fetchImage(albumMid)).then(decode).then(decoded=>{
       const bitmap=ArrayBuffer.isView(decoded)?decoded:decoded?.pixels
-      entry.result=extractMagicColors(bitmap,{order:'bgra'})
+      const order=decoded?.order??'bgra'
+      if(!['bgra','rgba'].includes(order))throw Error('Invalid artwork pixel order')
+      entry.result=extractMagicColors(bitmap,{order})
       const thumbnail=decoded?.thumbnail
       if(inlinePNG(thumbnail))entry.result.thumbnail=thumbnail
       const preview=decoded?.preview

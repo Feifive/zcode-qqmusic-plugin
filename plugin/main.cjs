@@ -56,18 +56,10 @@ async function snapshot() {
       .then(({ createPlaybackReporter }) => createPlaybackReporter({ options }))
     const sample = await run(['snapshot'])
     const result = sample.error ? { state: 'unavailable', track: null, lyric: null, error: sample.error } : await (await reporter).report(sample)
-    if (showCover || colorMode === 'album') paletteReader ??= import(pathToFileURL(join(__dirname, 'lib/artwork.js')).href).then(({createPaletteReader}) => createPaletteReader({
-      decode(bytes) {
-        const image = nativeImage.createFromBuffer(bytes)
-        if (image.isEmpty()) throw Error('Invalid cover image')
-        const size = image.getSize()
-        return {
-          preview:{image:image.toDataURL(),width:size.width,height:size.height},
-          pixels:image.resize({width:10,height:10,quality:'good'}).toBitmap(),
-          thumbnail:image.resize({width:40,height:40,quality:'good'}).toDataURL(),
-        }
-      },
-    }))
+    if (showCover || colorMode === 'album') paletteReader ??= Promise.all([
+      import(pathToFileURL(join(__dirname, 'lib/artwork.js')).href),
+      import(pathToFileURL(join(__dirname, 'lib/native-artwork.js')).href),
+    ]).then(([{createPaletteReader},{createArtworkDecoder}]) => createPaletteReader({decode:createArtworkDecoder(nativeImage)}))
     const artwork = (showCover || colorMode==='album') ? (await paletteReader).get(result.track?.albumMid) : null
     latest = { ...result, artworkThumbnail:showCover?artwork?.thumbnail||null:null, artworkColors:colorMode==='album'&&artwork?{magicColors:artwork.magicColors,pureColor:artwork.pureColor}:null, enabled, anyApp: options.anyApp, colorMode, showCover }
     sampledAt = Date.now()

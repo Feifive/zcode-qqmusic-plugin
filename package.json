@@ -1,6 +1,6 @@
 {
   "name": "zcode-music-plugin",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "type": "module",
   "description": "QQ Music lyric dock for the official ZCode macOS app",

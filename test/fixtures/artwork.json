@@ -1,0 +1,12 @@
+{
+  "qingtian": {
+    "albumMid": "000MkMni19ClKG",
+    "url": "https://y.gtimg.cn/music/photo_new/T002R300x300M000000MkMni19ClKG.jpg",
+    "width": 300,
+    "height": 300,
+    "decodedPixels": "qingtian-rgba.deflate",
+    "encoding": "zlib compressed RGBA8, top-to-bottom rows, opaque alpha",
+    "decoder": "macOS ImageIO, full-size JPEG decoding without resizing",
+    "expectedAccent": "#2DBADE"
+  }
+}
