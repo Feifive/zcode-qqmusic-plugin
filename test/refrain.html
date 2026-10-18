@@ -16,7 +16,7 @@ document.querySelector('#run').onclick=async()=>{
  const checks=[],check=(name,pass)=>{checks.push({name,pass:!!pass});if(!pass)throw Error(name)}
  try{
   await wait();check('只显示最高分并列中最早的一个点',shadow().querySelectorAll('.refrain-marker:not([hidden])').length===1&&marker().style.left==='25%')
-  check('标记为 3×7 圆角竖标',marker().getBoundingClientRect().width===3&&marker().getBoundingClientRect().height===7&&getComputedStyle(marker()).borderRadius==='3px')
+  check('标记为 3×5 圆角竖标',marker().getBoundingClientRect().width===3&&marker().getBoundingClientRect().height===5&&getComputedStyle(marker()).borderRadius==='3px')
   check('标记跟随主题色',getComputedStyle(marker()).backgroundColor==='rgb(40, 174, 196)');check('未播放部分保持灰色',getComputedStyle(slider()).backgroundColor==='rgba(136, 136, 136, 0.267)')
   check('标记不拦截进度拖动',getComputedStyle(marker()).pointerEvents==='none')
   const rect=slider().getBoundingClientRect();for(const type of ['pointerdown','pointerup'])slider().dispatchEvent(new PointerEvent(type,{bubbles:true,composed:true,button:0,isPrimary:true,pointerId:7,clientX:rect.left+rect.width*.25,clientY:rect.top}))
