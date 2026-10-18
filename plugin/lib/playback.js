@@ -1,12 +1,13 @@
 /**
  * Turns a media-session sample into the payload the dock renders.
  *
- * Pure decision logic on top of the two resolvers (title/artist -> songmid,
- * songmid -> lyric), so it can be exercised without a running Harness.
+ * Resolves song identity and lyrics, with optional background refrain metadata,
+ * so it can be exercised without a running Harness.
  */
 
 import { fetchLyric, fetchWordLyric, normalizeName, normalizeTitle, searchSong } from './qqmusic.js'
 import { pickSession, splitTitle } from './nowplaying.js'
+import { createRefrainReader, selectRefrainPoint } from './refrain.js'
 
 const HIT_TTL_MS = 30 * 60 * 1000
 const MISS_TTL_MS = 5 * 60 * 1000
@@ -33,7 +34,7 @@ function recall(map, key) {
   return entry.value
 }
 
-export function createPlaybackReporter({ options, log = () => {}, now = () => Date.now() }) {
+export function createPlaybackReporter({ options, log = () => {}, now = () => Date.now(), refrainReader = createRefrainReader() }) {
   const songs = new Map()
   const lyricBodies = new Map()
   const inflight = new Map()
@@ -109,6 +110,7 @@ export function createPlaybackReporter({ options, log = () => {}, now = () => Da
       sampledAt: (sample && sample.at) || 0,
       track: null,
       lyric: null,
+      refrain: null,
       error: null,
     }
 
@@ -150,7 +152,10 @@ export function createPlaybackReporter({ options, log = () => {}, now = () => Da
     track.albumMid = match.albumMid || ''
     if (!track.artist && match.singer) track.artist = match.singer
 
+    refrainReader.get(match.songmid)
     const parsed = await resolveLyric(match)
+    const point = selectRefrainPoint(refrainReader.get(match.songmid),track.durationMs)
+    payload.refrain = point ? {songmid:match.songmid,...point} : null
     if (parsed === null || parsed.lines.length === 0) return { ...payload, state: 'no-lyric' }
 
     return {

@@ -1,0 +1,11 @@
+{
+  "code": 0,
+  "req": {
+    "code": 0,
+    "data": {
+      "refrain": {
+        "0039MnYb0qxYhV": "{\"cfd_funclevel\":1,\"chorus_seg_times\":\"84916,154907|182925,238498|238498,266173\",\"idx_chorus_seg_end\":[38,55,63],\"idx_chorus_seg_start\":[30,47,55],\"timestamp\":1761290225,\"track_id\":97773}"
+      }
+    }
+  }
+}

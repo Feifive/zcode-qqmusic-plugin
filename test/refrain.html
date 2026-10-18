@@ -1,0 +1,36 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>副歌时间点检查</title>
+<style>body{font:14px system-ui;background:#fafafa;color:#333;padding:40px;--color-interaction-ask-foreground:#28aec4;--color-surface:#fff;--color-popover:#fff;--color-border:#ddd}.dark{background:#181a18;color:#eee;--color-foreground:#eee;--color-foreground-subtle:#888;--color-popover:#252823;--color-surface:#252823}.chat-composer-region{max-width:900px;margin:70px auto}.chat-composer-input-surface{padding:30px;border:1px solid #8884;border-radius:16px;background:var(--color-surface)}button.fixture{padding:9px 14px;margin:4px;cursor:pointer}output{display:block;white-space:pre-wrap;max-height:140px;overflow:auto;font:12px ui-monospace,monospace;margin:20px 0}</style>
+<h1>副歌时间点检查</h1><p>只画最高置信度的一个点，同分取最早起点。此页数据为本地模拟。</p>
+<button class="fixture" id="run">运行检查</button><button class="fixture" id="reset">恢复示例</button><button class="fixture" id="theme">切换深浅</button><output id="result">等待检查</output><output id="commands">定位命令：0</output>
+<div id="root"><div class="chat-composer-region"><div class="chat-composer-input-surface">输入消息</div></div></div>
+<script type="module">
+import {selectRefrainPoint} from '../plugin/lib/refrain.js'
+let config={enabled:true,showCover:false,colorMode:'theme'},songmid='A',duration=200000,position=10000,refrain,playing=false;const commands=[]
+function reset(){songmid='A';duration=200000;position=10000;playing=false;refrain={songmid,...selectRefrainPoint([{confidence:.8,startMs:20000,endMs:40000},{confidence:1,startMs:100000,endMs:130000},{confidence:1,startMs:50000,endMs:80000}],duration)}}
+reset();document.querySelector('#reset').onclick=reset;document.querySelector('#theme').onclick=()=>document.body.classList.toggle('dark')
+window.zcodeMusic={snapshot:async()=>({state:playing?'playing':'paused',...config,sampledAt:Date.now(),track:{app:'com.tencent.QQMusicMac',songmid,title:'副歌标记演示',artist:'本地示例',playing,positionMs:position,durationMs:duration},refrain,artworkColors:{magicColors:[{h:185,s:.6,b:.6}],pureColor:null},lyric:{offset:0,lines:[{start:0,duration:200000,text:'让副歌在进度条上，留下一点提示',words:[]}]}}),configure:async c=>(config={...config,...c}),control:async(action,target)=>{commands.push({action,target});position=target;playing=true;document.querySelector('#commands').textContent='定位命令：'+commands.length+' · '+JSON.stringify(commands.at(-1));return{ok:true,verified:true}}}
+const script=document.createElement('script');script.src='../plugin/renderer.js';document.body.append(script)
+const wait=()=>new Promise(r=>setTimeout(r,2200)),shadow=()=>document.querySelector('#zcode-music-plugin').shadowRoot,marker=()=>shadow().querySelector('.refrain-marker'),slider=()=>shadow().querySelector('.progress')
+document.querySelector('#run').onclick=async()=>{
+ document.querySelector('#run').disabled=true;commands.length=0;config.colorMode='theme';reset();document.body.classList.remove('dark')
+ const checks=[],check=(name,pass)=>{checks.push({name,pass:!!pass});if(!pass)throw Error(name)}
+ try{
+  await wait();check('只显示最高分并列中最早的一个点',shadow().querySelectorAll('.refrain-marker:not([hidden])').length===1&&marker().style.left==='25%')
+  check('标记为 3×7 圆角竖标',marker().getBoundingClientRect().width===3&&marker().getBoundingClientRect().height===7&&getComputedStyle(marker()).borderRadius==='3px')
+  check('标记跟随主题色',getComputedStyle(marker()).backgroundColor==='rgb(40, 174, 196)');check('未播放部分保持灰色',getComputedStyle(slider()).backgroundColor==='rgba(136, 136, 136, 0.267)')
+  check('标记不拦截进度拖动',getComputedStyle(marker()).pointerEvents==='none')
+  const rect=slider().getBoundingClientRect();for(const type of ['pointerdown','pointerup'])slider().dispatchEvent(new PointerEvent(type,{bubbles:true,composed:true,button:0,isPrimary:true,pointerId:7,clientX:rect.left+rect.width*.25,clientY:rect.top}))
+  await wait();check('标记位置可正常定位且标记不移动',commands.length===1&&commands[0].target===50000&&marker().style.left==='25%')
+  songmid='B';await wait();check('切歌后不残留旧歌曲标记',marker().hidden&&!slider().hasAttribute('aria-description'))
+  refrain={songmid:'B',confidence:.4,startMs:40000,endMs:80000};await wait();check('低置信度不显示',marker().hidden)
+  refrain=null;await wait();check('无数据不显示',marker().hidden)
+  refrain={songmid:'B',confidence:1,startMs:300000,endMs:310000};await wait();check('超过歌曲时长不显示',marker().hidden)
+  refrain={songmid:'B',confidence:1,startMs:50000,endMs:80000};duration=0;await wait();check('未知时长不显示',marker().hidden)
+  reset();await wait();const mode=shadow().querySelector('.color-mode');mode.value='album';mode.dispatchEvent(new Event('change'));await wait();check('标记跟随专辑色',getComputedStyle(marker()).backgroundColor===getComputedStyle(slider().querySelector('i')).backgroundColor&&getComputedStyle(marker()).backgroundColor==='rgb(45, 186, 222)')
+  document.body.classList.add('dark');await wait();check('暗色主题保持单一标记和同一强调色',!marker().hidden&&getComputedStyle(marker()).backgroundColor===getComputedStyle(slider().querySelector('i')).backgroundColor)
+  document.body.classList.remove('dark');mode.value='theme';mode.dispatchEvent(new Event('change'));reset();await wait()
+  document.querySelector('#result').textContent='PASS '+checks.length+' checks\n'+JSON.stringify(checks,null,2)
+ }catch(error){document.querySelector('#result').textContent='FAIL '+error.message+'\n'+JSON.stringify(checks,null,2)}
+ finally{document.querySelector('#run').disabled=false}
+}
+</script></html>

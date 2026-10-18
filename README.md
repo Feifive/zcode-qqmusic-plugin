@@ -1,6 +1,6 @@
 # ZCode QQ 音乐歌词插件
 
-在 ZCode 聊天输入框上方显示 QQ 音乐同步歌词。当前 **0.3.5**，适配官方 **ZCode macOS 3.15.3**。
+在 ZCode 聊天输入框上方显示 QQ 音乐同步歌词。当前 **0.3.6**，适配官方 **ZCode macOS 3.15.3**。
 
 [下载安装器](https://github.com/Feifive/zcode-qqmusic-plugin/releases/latest) · [安装说明](INSTALL-OTHER-MAC.md)
 
@@ -17,6 +17,7 @@ ZCode 官方升级可能覆盖加载器；需要使用适配该官方版本的�
 - 歌名前显示 20×20 圆角专辑封面，缺失或加载失败时显示唱片占位图；主题色与专辑色模式均显示封面，可在设置中关闭封面，悬停约 2 秒显示原尺寸大图。封面缩略图复用同一次缓存请求，不阻塞歌词同步。
 - QQ 音乐系统当前播放会话、播放/暂停、上一首/下一首；可选跟随其他播放器。
 - 进度条支持点击、拖动定位，松手时提交；暂停时定位成功后自动恢复播放。方向键每次前后 5 秒，Home / End 跳到起点或终点。未知时长和演示模式不发送定位命令。
+- 进度条用一个小圆角竖标提示副歌起点，跟随主题色或专辑色。只选置信度最高的一段，同分取最早起点；无有效数据时隐藏，不影响进度拖动。详见 [副歌标记说明](docs/refrain.md)。
 - QRC 按真实逐字时间和字符像素宽度推进，高速英文、重叠词和长句滚动使用同一播放时间轴。只有 LRC 时显示逐行歌词。
 - 只在对话跟随最底部时显示歌词条，避免与聊天内容重叠。
 - 设置可选跟随 ZCode 主题色或专辑色，歌名、数字进度和控制高亮跟随同一配色；进度条未播放部分为灰色。
@@ -31,7 +32,7 @@ ZCode.app 中的固定加载器（首次安装或修复）
                 ↓ 验证签名与文件哈希
 ~/Library/Application Support/ZCode Music/
   active.json                 当前版本 / 上一版本，原子切换
-  versions/0.3.5/             主进程、界面、媒体库与签名清单
+  versions/0.3.6/             主进程、界面、媒体库与签名清单
   settings.json              插件偏好设置
   backups/<官方版本>-<哈希>/   原始官方 ZCode.app
   installation.json          加载器安装记录
@@ -65,7 +66,7 @@ npm run uninstall        # 卸载加载器，恢复匹配原包
 
 ## 验证与限制
 
-`npm test` 覆盖歌词、歌曲版本匹配、完整配色原表、设置、签名更新、错误包拒绝、版本切换/回退、损坏回退与 IPC 信任边界。`test/colors.html`、`test/word-sync.html`、`preview.html` 可用于界面预览；`npm run test:live` 检查正在播放的真实 QQ 会话。
+`npm test` 覆盖歌词、副歌点解析与选择、歌曲版本匹配、完整配色原表、设置、签名更新、错误包拒绝、版本切换/回退、损坏回退与 IPC 信任边界。`test/refrain.html`、`test/colors.html`、`test/word-sync.html`、`preview.html` 可用于界面预览；`npm run test:live` 检查正在播放的真实 QQ 会话。
 
 媒体桥接通过 macOS MediaRemote 读取系统当前播放会话，macOS 15.4+ 采用系统 Perl 加载本地媒体库，参考 [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter)。无需修改 SIP。当前实测 macOS 27.0.1、QQ 音乐 11.10.5；其它 macOS 版本需要目标机验证。
 

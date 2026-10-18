@@ -8,6 +8,7 @@
   const { paletteForArtwork, relativeLuminance } = await import(new URL('./lib/colors.js', scriptURL).href)
   const { inlinePNG, coverPreviewLayout, createCoverPreview } = await import(new URL('./lib/cover.js', scriptURL).href)
   const { seekRatio, createSeekInteraction } = await import(new URL('./lib/seek.js', scriptURL).href)
+  const { refrainPosition } = await import(new URL('./lib/refrain.js', scriptURL).href)
   const host = document.createElement('div')
   host.id = 'zcode-music-plugin'
   host.hidden = true
@@ -20,7 +21,7 @@
         <button data-action="prev" aria-label="上一首" title="上一首"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 5v14M19 5 9 12l10 7V5Z"/></svg></button>
         <button data-action="toggle" aria-label="播放" title="播放"><svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 11 7-11 7V5Z"/></svg><svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5v14M15 5v14"/></svg></button>
         <button data-action="next" aria-label="下一首" title="下一首"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 5v14M5 5l10 7-10 7V5Z"/></svg></button>
-      </div></div><div class="progress" role="slider" aria-label="播放进度" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true" tabindex="-1"><i></i></div>
+      </div></div><div class="progress" role="slider" aria-label="播放进度" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true" tabindex="-1"><i></i><span class="refrain-marker" hidden aria-hidden="true"></span></div>
     </div>
     <div class="idle" aria-hidden="true"></div>
     <button class="launcher" title="QQ 音乐歌词设置" aria-label="QQ 音乐歌词设置" aria-expanded="false">♪</button>
@@ -50,7 +51,8 @@
   const demoData = {
     state: 'playing', sampledAt: Date.now(), enabled: true,
     artworkColors: {magicColors:[{h:166,s:.62,b:.64}],pureColor:{h:166,s:.62,b:.64}},
-    track: { title: '歌词条预览', artist: 'QQ 音乐', playing: true, positionMs: 0, durationMs: 32000 },
+    track: { title: '歌词条预览', artist: 'QQ 音乐', songmid:'demo', playing: true, positionMs: 0, durationMs: 32000 },
+    refrain: {songmid:'demo',confidence:1,startMs:8000,endMs:16000},
     lyric: { offset: 0, lines: [
       { start: 0, duration: 8000, text: '让音乐陪你，把灵感写成代码', words: [{ text: '让音乐', start: 0, duration: 2200 }, { text: '陪你，', start: 2200, duration: 1400 }, { text: '把灵感', start: 3600, duration: 2000 }, { text: '写成代码', start: 5600, duration: 2400 }] },
       { start: 8000, duration: 8000, text: '一句歌词，一点专注，慢慢向前', words: [] },
@@ -147,6 +149,17 @@
     onFailure: () => { status.textContent='定位失败，请在 QQ 音乐中操作'; togglePanel(true) },
   })
   const progress = $('.progress')
+  const refrainMarker = $('.refrain-marker')
+  let refrainKey = ''
+  function paintRefrain(snapshot) {
+    const ratio=refrainPosition(snapshot.refrain,snapshot.track?.songmid,snapshot.track?.durationMs)
+    const key=ratio===null?'':`${snapshot.track.songmid}:${snapshot.refrain.startMs}:${ratio}`
+    if(key===refrainKey)return
+    refrainKey=key
+    refrainMarker.hidden=ratio===null
+    if(ratio===null){refrainMarker.style.removeProperty('left');progress.removeAttribute('aria-description')}
+    else{refrainMarker.style.left=`${ratio*100}%`;progress.setAttribute('aria-description',`副歌起点 ${fmt(snapshot.refrain.startMs)}`)}
+  }
   function releasePointer() {
     const id=pointerId;pointerId=null
     if(id!==null&&progress.hasPointerCapture(id))progress.releasePointerCapture(id)
@@ -311,6 +324,7 @@
     const visible = Boolean(track) && snapshot.state !== 'disabled'
     dock.hidden = !visible
     $('.idle').hidden = visible
+    paintRefrain(visible?snapshot:{})
     if (!visible) { cancelScrub();hideCoverPreview(); return }
     if(pointerId!==null&&!seek.dragging)releasePointer()
     paintCover(snapshot)
