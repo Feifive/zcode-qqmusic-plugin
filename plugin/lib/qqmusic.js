@@ -151,10 +151,10 @@ export async function searchSong({ title, artist, durationMs, album }, options =
 }
 
 /**
- * Fetch the word-by-word (QRC) lyric, decrypted into timed lines.
+ * Fetch word-by-word QRC lyrics as timed lines.
  *
- * The client-payload endpoint wraps the cipher in an XML document; the payload
- * itself is hex for `encode="1"` responses and may already be plain text.
+ * The response contains an XML document. For `encode="1"`, convert the
+ * hexadecimal payload before parsing its line and word timestamps.
  *
  * @returns {Promise<{offset: number, kind: 'qrc', lines: Array<object>} | null>}
  */

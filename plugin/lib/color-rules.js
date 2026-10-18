@@ -1,4 +1,4 @@
-// Exact constants from research/qqmusic-magic-color-spec.md §5.4.
+// Album palette constants; see docs/colors.md.
 export const colorRules = {
   "extract": {
     "thumbnail": 10,

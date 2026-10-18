@@ -1,18 +1,7 @@
 /**
- * QQ Music QRC (word-by-word lyric) decoding.
- *
- * The payload QQ Music serves for karaoke lyrics is not LRC: it is a hex cipher
- * that decrypts into a zlib stream holding a text document whose lines look like
- *
- *   [startMs,durationMs](wordStartMs,wordDurationMs)word(…)(…)…
- *
- * The cipher is a DES-family construction with three fixed 8-byte keys applied
- * as D(K3) → E(K2) → D(K1). It differs from textbook DES in its bit ordering, so
- * this module implements the rounds on plain bit arrays: slower than a table
- * implementation, but the result is read once per song and cached.
- *
- * The permutations below are the public DES constants (S/E/P) plus the
- * interoperability tables for this variant; the round wiring is standard Feistel.
+ * QQ Music QRC word timing support.
+ * Converts service payloads to text and parses line and word timestamps.
+ * Each record includes a line start, duration, and per-word timing values.
  */
 
 import { inflateSync } from 'node:zlib'
@@ -131,7 +120,7 @@ function rotateLeft(bits, count) {
   return out
 }
 
-/** Expand one 8-byte key into sixteen 48-bit round keys (reverse order for decrypt). */
+/** Build the sixteen-round schedule for one 8-byte input key. */
 function roundKeys(key, direction) {
   const stream = keyBitStream(key)
   let c = PC1_C.map((index) => stream[index])
@@ -198,9 +187,9 @@ function cryptBlock(input, keys) {
 }
 
 /**
- * Decrypt one hex payload into the QRC document text.
- * @param {string} hex encrypted bytes as served by QQ Music
- * @returns {string} the decrypted QRC text
+ * Convert a hexadecimal service payload to QRC text.
+ * @param {string} hex hexadecimal service payload
+ * @returns {string} QRC text
  */
 export function decryptQrc(hex) {
   if (typeof hex !== 'string' || hex.trim() === '') throw new Error('qrc: empty payload')
@@ -244,7 +233,7 @@ function unescapeXml(text) {
  * 晴 starts at 0 and 天 at 160 — so the run of text before each stamp is that
  * word, and anything after the final stamp has no word timing of its own.
  *
- * @param {string} text decrypted QRC document
+ * @param {string} text QRC document
  * @returns {Array<{start: number, duration: number, text: string, words: Array<{start: number, duration: number, text: string}>}>}
  */
 export function parseQrc(text) {

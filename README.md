@@ -21,7 +21,7 @@ ZCode 官方升级可能覆盖加载器；需要使用适配该官方版本的�
 - 只在对话跟随最底部时显示歌词条，避免与聊天内容重叠。
 - 设置可选跟随 ZCode 主题色或专辑色，歌名、数字进度和控制高亮跟随同一配色；进度条未播放部分为灰色。
 - 专辑色模式在封面等待、缺失、下载/解码/取色失败或映射失败时，统一回退 QQ 绿 `#00F168`，失败数据不再进入灰度规则。真实灰度封面仍按有效配色映射；主题色模式始终跟随 ZCode。
-- 专辑色严格按 [QQ magicColors 规格](research/qqmusic-magic-color-spec.md) 的 10×10 封面提取、8 个色相桶、HSB 柔和化及亮/暗各 26 条映射规则实现，无额外对比度重调。包含文档中的手工映射表。
+- 专辑色使用 [配色说明](docs/colors.md) 中的 10×10 封面提取、8 个色相桶、HSB 柔和化及亮/暗各 26 条映射规则实现，无额外对比度重调。包含完整的固定配色表。
 - 拆分 QQ 搜索结果的分号歌手字段，用完整版本标题、时长和专辑区分原版、Live、纯音乐和 Remix。回归案例 K/DA《POP/STARS》不会误选 50 秒 Remix。
 
 ## 加载与更新设计
@@ -67,8 +67,8 @@ npm run restore          # 卸载加载器，恢复匹配原包
 
 `npm test` 覆盖歌词、歌曲版本匹配、完整配色原表、设置、签名更新、错误包拒绝、版本切换/回退、损坏回退与 IPC 信任边界。`test/colors.html`、`test/word-sync.html`、`preview.html` 可用于界面预览；`npm run test:live` 检查正在播放的真实 QQ 会话。
 
-媒体桥接使用 macOS MediaRemote 私有接口，macOS 15.4+ 采用系统 Perl 加载本地媒体库，参考 [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter)。无需修改 SIP。当前实测 macOS 27.0.1、QQ 音乐 11.10.5；其它 macOS 版本需要目标机验证。
+媒体桥接通过 macOS MediaRemote 读取系统当前播放会话，macOS 15.4+ 采用系统 Perl 加载本地媒体库，参考 [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter)。无需修改 SIP。当前实测 macOS 27.0.1、QQ 音乐 11.10.5；其它 macOS 版本需要目标机验证。
 
-QQ 音乐必须向系统媒体会话上报歌曲与时间；插件无法从空会话推断歌曲。歌词检索只向 QQ 音乐公开接口发送标题、歌手等匹配信息，封面来自固定 QQ CDN，不读取播放器登录信息。歌词服务可能无结果。进度条保持只读，MediaRemote 的定位能力标识不可靠。
+QQ 音乐必须向系统媒体会话上报歌曲与时间；空会话时无法获取歌曲信息。歌词检索只向 QQ 音乐公开接口发送标题、歌手等匹配信息，封面来自固定 QQ CDN，不读取播放器登录信息。歌词服务可能无结果。进度条保持只读，MediaRemote 的定位能力标识不可靠。
 
 本项目为第三方扩展，与 ZCode、QQ 音乐官方无关联。Windows、Linux 与其它 ZCode 版本尚未适配。

@@ -7,9 +7,8 @@ const hsv=(h,s=.6,b=.6)=>({h,s,b})
 const rgba=(...samples)=>Uint8Array.from(samples.flatMap(([r,g,b,count=1])=>Array.from({length:count},()=>[r,g,b,255]).flat()))
 const settle=()=>new Promise(resolve=>setImmediate(resolve))
 
-test('all light/dark rules and multi-color constants exactly equal the supplied specification',()=>{
- const spec=readFileSync(new URL('../research/qqmusic-magic-color-spec.md',import.meta.url),'utf8').split('### 5.4')[1]
- const expected=JSON.parse(/```json\n([\s\S]*?)\n```/.exec(spec)[1])
+test('all light/dark rules and multi-color constants match the palette fixture',()=>{
+ const expected=JSON.parse(readFileSync(new URL('./fixtures/color-rules.json',import.meta.url),'utf8'))
  assert.deepEqual(colorRules,expected)
  assert.equal(colorRules.mapping.light.length,26);assert.equal(colorRules.mapping.dark.length,26)
 })

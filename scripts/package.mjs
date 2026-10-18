@@ -9,10 +9,8 @@ const stage = join(root, 'dist', `zcode-music-plugin-${version}`)
 const zip = `${stage}-source.zip`
 rmSync(stage, { recursive: true, force: true })
 mkdirSync(stage, { recursive: true })
-for (const name of ['package.json', 'README.md', 'INSTALL-OTHER-MAC.md', 'preview.html', '.gitignore', 'plugin', 'native', 'scripts', 'test', 'loader', 'release', '.github']) {
+for (const name of ['package.json', 'README.md', 'INSTALL-OTHER-MAC.md', 'preview.html', '.gitignore', 'plugin', 'native', 'scripts', 'test', 'loader', 'release', '.github', 'docs']) {
   cpSync(join(root, name), join(stage, name), { recursive: true, dereference: true })
 }
-mkdirSync(join(stage, 'research'), { recursive: true })
-cpSync(join(root, 'research/qqmusic-magic-color-spec.md'), join(stage, 'research/qqmusic-magic-color-spec.md'))
 execFileSync('/usr/bin/ditto', ['-c', '-k', '--keepParent', '--norsrc', stage, zip])
 console.log(zip)

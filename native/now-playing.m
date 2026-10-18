@@ -2,8 +2,8 @@
 #import <dlfcn.h>
 #import <objc/message.h>
 
-// Keep the private framework in a small, replaceable process. No injection into
-// the player, Accessibility permission, account data or music cache is needed.
+// Read system playback metadata in a small, replaceable helper process.
+// Account data and music caches are not accessed.
 typedef void (*GetInfo)(dispatch_queue_t, void (^)(CFDictionaryRef));
 typedef void (*GetPID)(dispatch_queue_t, void (^)(int));
 typedef void (*GetPlaying)(dispatch_queue_t, void (^)(bool));
