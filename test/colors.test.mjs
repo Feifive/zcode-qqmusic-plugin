@@ -117,3 +117,37 @@ test('decode and empty/transparent extraction failures retain the QQ green fallb
  }
  for(const pixels of [null,[],new Uint8Array(),new Uint8Array(3),new Uint8Array(400)])assert.throws(()=>extractMagicColors(pixels),/pixels/)
 })
+
+test('cover thumbnails share the album cache with colors and never cross album identities',async()=>{
+ const jobs=new Map();let requests=0
+ const thumbs={A:'data:image/png;base64,QUFB',B:'data:image/png;base64,QkJC'}
+ const reader=createPaletteReader({fetchImage:id=>{requests++;return new Promise(resolve=>jobs.set(id,resolve))},decode:id=>({pixels:rgba([61,153,61,100]),thumbnail:thumbs[id]})})
+ assert.equal(reader.get('A'),null);assert.equal(reader.get('A'),null);assert.equal(reader.get('B'),null)
+ await settle();assert.equal(requests,2)
+ jobs.get('A')('A');await settle()
+ assert.equal(reader.get('A').thumbnail,thumbs.A);assert.equal(reader.get('B'),null)
+ jobs.get('B')('B');await settle()
+ assert.equal(reader.get('B').thumbnail,thumbs.B);assert.equal(reader.get('A').thumbnail,thumbs.A)
+ assert.equal(requests,2);assert.equal(reader.get('../../invalid'),null)
+})
+test('cover cache only exports bounded inline PNG thumbnails',async()=>{
+ for(const thumbnail of ['https://example.com/image.png','data:image/svg+xml;base64,QUFB','data:image/png;base64,'+'A'.repeat(65536),null]){
+  const reader=createPaletteReader({fetchImage:async()=>null,decode:()=>({pixels:rgba([61,153,61,100]),thumbnail})})
+  reader.get('album');await settle()
+  assert.equal(reader.get('album').thumbnail,undefined)
+  assert.ok(reader.get('album').magicColors.length)
+ }
+})
+
+test('original cover previews reuse the cache, stay album-scoped and reject invalid image data',async()=>{
+ const image='data:image/png;base64,QUFB',jobs=new Map();let requests=0
+ const reader=createPaletteReader({fetchImage:id=>{requests++;return new Promise(resolve=>jobs.set(id,resolve))},decode:preview=>({pixels:rgba([61,153,61,100]),preview})})
+ assert.equal(reader.preview('A'),null);assert.equal(requests,0)
+ reader.get('A');reader.get('B');await settle()
+ jobs.get('A')({image,width:300,height:300});await settle()
+ assert.deepEqual(reader.preview('A'),{image,width:300,height:300});assert.equal(reader.preview('B'),null)
+ assert.equal(reader.get('A').preview,undefined);assert.equal(requests,2)
+ jobs.get('B')({image:'https://example.com/image.png',width:300,height:300});await settle()
+ assert.equal(reader.preview('B'),null);assert.equal(reader.preview('../../invalid'),null)
+ assert.deepEqual(reader.preview('A'),{image,width:300,height:300})
+})

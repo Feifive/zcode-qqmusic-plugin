@@ -1,4 +1,5 @@
 import { extractMagicColors } from './colors.js'
+import { inlinePNG } from './cover.js'
 const MAX_BYTES=2*1024*1024
 export function artworkURL(albumMid){
   return typeof albumMid==='string'&&/^[a-zA-Z0-9]{1,64}$/.test(albumMid)?`https://y.gtimg.cn/music/photo_new/T002R300x300M000${albumMid}.jpg`:null
@@ -25,11 +26,19 @@ export function createPaletteReader({decode,fetchImage=fetchArtwork,now=Date.now
     const entry={pending:true,result:null,expires:0,ok:false}
     cache.delete(albumMid);cache.set(albumMid,entry)
     if(cache.size>64)cache.delete(cache.keys().next().value)
-    Promise.resolve().then(()=>fetchImage(albumMid)).then(decode).then(bitmap=>{
-      entry.result=extractMagicColors(bitmap,{order:'bgra'});entry.ok=true
+    Promise.resolve().then(()=>fetchImage(albumMid)).then(decode).then(decoded=>{
+      const bitmap=ArrayBuffer.isView(decoded)?decoded:decoded?.pixels
+      entry.result=extractMagicColors(bitmap,{order:'bgra'})
+      const thumbnail=decoded?.thumbnail
+      if(inlinePNG(thumbnail))entry.result.thumbnail=thumbnail
+      const preview=decoded?.preview
+      if(inlinePNG(preview?.image,2*1024*1024)&&Number.isFinite(preview.width)&&Number.isFinite(preview.height)&&preview.width>0&&preview.height>0)entry.preview=preview
+      entry.ok=true
     }).catch(()=>{entry.result={magicColors:[],pureColor:null}}).finally(()=>{
       entry.pending=false;entry.expires=now()+(entry.ok?6*60*60_000:5*60_000)
     })
     return null
+  },preview(albumMid){
+    return artworkURL(albumMid)?cache.get(albumMid)?.preview||null:null
   }}
 }

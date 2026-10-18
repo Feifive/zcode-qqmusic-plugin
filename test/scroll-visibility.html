@@ -25,7 +25,7 @@ document.querySelector('#run').onclick=async()=>{
  const checks=[];const check=(name,ok)=>{checks.push({name,pass:!!ok});out.textContent=JSON.stringify(checks,null,2);if(!ok)throw Error(name)};
  try{
   bottom();await settle();check('最底部显示歌词条',visible());
-  getHost().shadowRoot.querySelector('.track').click();await settle();check('设置面板可打开',!getHost().shadowRoot.querySelector('.panel').hidden);
+  getHost().shadowRoot.querySelector('.launcher').click();await settle();check('设置面板可打开',!getHost().shadowRoot.querySelector('.panel').hidden);
   away();await settle();check('上翻整条隐藏且不占高度',!visible()&&getHost().getBoundingClientRect().height===0);check('上翻关闭设置面板',getHost().shadowRoot.querySelector('.panel').hidden);
   await settle();check('隐藏后布局稳定，不反复显示',!visible());
   active.querySelector('.nested').scrollTop=200;await settle();check('嵌套代码滚动不改变音乐条状态',!visible());

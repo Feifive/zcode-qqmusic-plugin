@@ -6,13 +6,14 @@
   const scriptURL = document.currentScript?.src || new URL('./zcode-music.js', location.href).href
   const { wordTextRanges, sweepPositionAt, followWordOffset } = await import(new URL('./lyric-timing.js', scriptURL).href)
   const { paletteForArtwork, relativeLuminance } = await import(new URL('./lib/colors.js', scriptURL).href)
+  const { inlinePNG, coverPreviewLayout, createCoverPreview } = await import(new URL('./lib/cover.js', scriptURL).href)
   const host = document.createElement('div')
   host.id = 'zcode-music-plugin'
   host.hidden = true
   const shadow = host.attachShadow({ mode: 'open' })
   shadow.innerHTML = `<link rel="stylesheet" href="${new URL('./renderer.css', scriptURL)}">
     <div class="dock" hidden>
-      <button class="track" title="打开 QQ 音乐歌词设置"><span class="note">♪</span><span class="name"></span><span class="meter"><i></i><i></i><i></i></span></button>
+      <div class="track"><span class="cover" role="img" aria-label="专辑封面" tabindex="0"><svg viewBox="0 0 20 20" focusable="false"><circle cx="10" cy="10" r="6.5"/><circle cx="10" cy="10" r="1.5"/></svg><img alt="" width="20" height="20" draggable="false" hidden></span><span class="name"></span><span class="meter"><i></i><i></i><i></i></span></div>
       <div class="lyric"><span></span></div>
       <div class="transport"><span class="time"></span><div class="controls">
         <button data-action="prev" aria-label="上一首" title="上一首"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 5v14M19 5 9 12l10 7V5Z"/></svg></button>
@@ -20,11 +21,14 @@
         <button data-action="next" aria-label="下一首" title="下一首"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 5v14M5 5l10 7-10 7V5Z"/></svg></button>
       </div></div><div class="progress"><i></i></div>
     </div>
-    <div class="idle"><button class="launcher" title="QQ 音乐歌词设置" aria-label="QQ 音乐歌词设置">♪</button></div>
+    <div class="idle" aria-hidden="true"></div>
+    <button class="launcher" title="QQ 音乐歌词设置" aria-label="QQ 音乐歌词设置" aria-expanded="false">♪</button>
+    <div class="cover-preview" hidden aria-hidden="true"><img alt=""></div>
     <section class="panel" hidden aria-label="QQ 音乐歌词设置">
       <header><span>♪ QQ 音乐歌词</span><button class="close" aria-label="关闭设置">×</button></header>
       <p class="status">正在连接播放器…</p>
       <label><span>显示同步歌词</span><input class="enabled" type="checkbox" checked></label>
+      <label><span>显示专辑封面</span><input class="show-cover" type="checkbox" checked></label>
       <label><span>也跟随其他播放器</span><input class="any-app" type="checkbox"></label>
       <label><span>配色来源</span><select class="color-mode" aria-label="配色来源"><option value="theme">跟随 ZCode 主题色</option><option value="album" selected>跟随专辑色</option></select></label>
       <button class="demo">预览歌词条</button>
@@ -84,10 +88,60 @@
     }
     dock.classList.toggle('magic',Boolean(colors))
   }
+  let coverKey = null, coverURL = '', coverAlbum = '', coverHover = false, coverFocused = false
+  const previewController = createCoverPreview({
+    request: () => api.configure({ coverPreview: true }),
+    isCurrent: (expected,result) => coverURL === expected.url && coverAlbum === expected.album && String(result?.albumMid || '') === expected.album && !host.hidden && !$('.cover').hidden && (coverHover || coverFocused),
+    onHide: () => { $('.cover-preview').hidden = true; $('.cover-preview img').removeAttribute('src') },
+    onShow: (url,isCurrent) => {
+      const image = document.createElement('img')
+      image.alt = '专辑封面大图'
+      image.onload = () => {
+        if (!isCurrent() || $('.cover-preview img') !== image) return
+        const layout = coverPreviewLayout({width:image.naturalWidth,height:image.naturalHeight,anchor:$('.cover').getBoundingClientRect(),viewport:{width:innerWidth,height:innerHeight},origin:host.getBoundingClientRect()})
+        if (!layout) return
+        for (const [property,value] of Object.entries(layout)) $('.cover-preview').style[property] = `${value}px`
+        $('.cover-preview').hidden = false
+      }
+      image.onerror = () => { if (isCurrent()) hideCoverPreview() }
+      $('.cover-preview img').replaceWith(image)
+      image.src = url
+    },
+  })
+  function hideCoverPreview() { previewController.cancel() }
+  function scheduleCoverPreview() {
+    if (!coverURL || $('.cover').hidden || $('.cover img').hidden || !(coverHover || coverFocused)) { hideCoverPreview(); return }
+    previewController.schedule({url:coverURL,album:coverAlbum})
+  }
+  $('.cover').onmouseenter = () => { coverHover = true; scheduleCoverPreview() }
+  $('.cover').onmouseleave = () => { coverHover = false; if (!coverFocused) hideCoverPreview() }
+  $('.cover').onfocus = () => { coverFocused = true; scheduleCoverPreview() }
+  $('.cover').onblur = () => { coverFocused = false; if (!coverHover) hideCoverPreview() }
+  function paintCover(snapshot) {
+    const shown = $('.show-cover').checked
+    const url = shown ? inlinePNG(snapshot.artworkThumbnail) : ''
+    const album = String(snapshot.track?.albumMid || '')
+    const key = `${shown}:${album}:${url}`
+    if (key === coverKey) return
+    hideCoverPreview()
+    coverKey = key; coverURL = url; coverAlbum = album
+    $('.cover').hidden = !shown
+    const image = document.createElement('img')
+    image.alt = ''; image.width = image.height = 20; image.draggable = false; image.hidden = true
+    image.decoding = 'async'
+    image.onload = () => { if ($('.cover img') === image) { image.hidden = false; if (coverHover || coverFocused) scheduleCoverPreview() } }
+    image.onerror = () => { image.hidden = true; if ($('.cover img') === image) hideCoverPreview() }
+    $('.cover img').replaceWith(image)
+    if (url) image.src = url
+  }
+  window.addEventListener('resize', hideCoverPreview)
+  document.addEventListener('scroll', hideCoverPreview, true)
   const fmt = ms => { const seconds = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` }
   function togglePanel(open = $('.panel').hidden) {
+    hideCoverPreview()
     $('.panel').hidden = !open
-    if (open) { $('.close').focus(); updateStatus() }
+    $('.launcher').setAttribute('aria-expanded', String(open))
+    if (open) updateStatus()
   }
   let updateBusy = false
   async function updateStatus(action = 'status') {
@@ -117,7 +171,6 @@
   $('.install-update').onclick = () => updateStatus('install')
   $('.restart-update').onclick = () => updateStatus('restart')
   $('.rollback-update').onclick = () => updateStatus('rollback')
-  $('.track').onclick = () => togglePanel()
   $('.launcher').onclick = () => togglePanel()
   $('.close').onclick = () => togglePanel(false)
   shadow.addEventListener('keydown', e => { if (e.key === 'Escape') togglePanel(false) })
@@ -126,7 +179,7 @@
   async function configure({ keepDemo = false } = {}) {
     configuring++
     try {
-      await api.configure({ enabled: $('.enabled').checked, anyApp: $('.any-app').checked, colorMode: $('.color-mode').value })
+      await api.configure({ enabled: $('.enabled').checked, anyApp: $('.any-app').checked, colorMode: $('.color-mode').value, showCover: $('.show-cover').checked })
       if (!keepDemo) {
         demo = false
         $('.demo').textContent = '预览歌词条'
@@ -138,6 +191,7 @@
   }
   $('.enabled').onchange = configure
   $('.any-app').onchange = configure
+  $('.show-cover').onchange = () => { paintCover(demo ? demoData : data); configure({ keepDemo: true }) }
   $('.color-mode').onchange = () => configure({ keepDemo: true })
   $('.demo').onclick = () => {
     demo = !demo
@@ -193,7 +247,10 @@
     if (disposed) return
     try {
       data = await api.snapshot()
-      if (!configuring) $('.color-mode').value = data.colorMode === 'theme' ? 'theme' : 'album'
+      if (!configuring) {
+        $('.color-mode').value = data.colorMode === 'theme' ? 'theme' : 'album'
+        $('.show-cover').checked = data.showCover !== false
+      }
       if (!demo) {
         status.textContent = messages[data.state] || `${data.track?.playing ? '正在播放' : '已暂停'} · ${data.track?.title || 'QQ 音乐'}`
         $('.enabled').checked = data.enabled !== false
@@ -212,11 +269,12 @@
     const visible = Boolean(track) && snapshot.state !== 'disabled'
     dock.hidden = !visible
     $('.idle').hidden = visible
-    if (!visible) return
+    if (!visible) { hideCoverPreview(); return }
+    paintCover(snapshot)
     const id = `${demo}:${track.title}:${track.artist}`
     if (lastTrack !== id) {
       $('.name').textContent = `${track.title}${track.artist ? ` · ${track.artist}` : ''}`
-      $('.track').title = `${track.title} — ${track.artist || 'QQ 音乐'} · 点击打开歌词设置`
+      $('.track').title = `${track.title} — ${track.artist || 'QQ 音乐'}`
       lastTrack = id
     }
     const age = Date.now() - (snapshot.sampledAt || Date.now())
@@ -288,6 +346,9 @@
   }
   window.addEventListener('pagehide', () => {
     disposed = true; clearTimeout(timer); cancelAnimationFrame(frame); observer.disconnect(); followObserver.disconnect(); resize.disconnect(); lyricResize.disconnect()
+    hideCoverPreview()
+    window.removeEventListener('resize', hideCoverPreview)
+    document.removeEventListener('scroll', hideCoverPreview, true)
     document.fonts?.removeEventListener('loadingdone', onFontsLoaded)
     document.removeEventListener('pointerdown', outside); host.remove()
   }, { once: true })

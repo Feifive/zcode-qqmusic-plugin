@@ -12,6 +12,7 @@ const reader = join(nativeDir, 'reader.pl')
 const options = { apps: ['qqmusic'], anyApp: false, pollMs: 2000 }
 let enabled = true
 let colorMode = 'album'
+let showCover = true
 let settingsFile
 let latest = null
 let sampledAt = 0
@@ -47,7 +48,7 @@ function run(args = []) {
   })
 }
 async function snapshot() {
-  if (!enabled) return { state: 'disabled', track: null, lyric: null, enabled, anyApp: options.anyApp, colorMode }
+  if (!enabled) return { state: 'disabled', track: null, lyric: null, enabled, anyApp: options.anyApp, colorMode, showCover }
   if (latest && Date.now() - sampledAt < 1400) return latest
   if (inflight) return inflight
   inflight = (async () => {
@@ -55,14 +56,20 @@ async function snapshot() {
       .then(({ createPlaybackReporter }) => createPlaybackReporter({ options }))
     const sample = await run(['snapshot'])
     const result = sample.error ? { state: 'unavailable', track: null, lyric: null, error: sample.error } : await (await reporter).report(sample)
-    if (colorMode === 'album') paletteReader ??= import(pathToFileURL(join(__dirname, 'lib/artwork.js')).href).then(({createPaletteReader}) => createPaletteReader({
+    if (showCover || colorMode === 'album') paletteReader ??= import(pathToFileURL(join(__dirname, 'lib/artwork.js')).href).then(({createPaletteReader}) => createPaletteReader({
       decode(bytes) {
         const image = nativeImage.createFromBuffer(bytes)
         if (image.isEmpty()) throw Error('Invalid cover image')
-        return image.resize({width:10,height:10,quality:'good'}).toBitmap()
+        const size = image.getSize()
+        return {
+          preview:{image:image.toDataURL(),width:size.width,height:size.height},
+          pixels:image.resize({width:10,height:10,quality:'good'}).toBitmap(),
+          thumbnail:image.resize({width:40,height:40,quality:'good'}).toDataURL(),
+        }
       },
     }))
-    latest = { ...result, artworkColors: colorMode === 'album' ? (await paletteReader).get(result.track?.albumMid) : null, enabled, anyApp: options.anyApp, colorMode }
+    const artwork = (showCover || colorMode==='album') ? (await paletteReader).get(result.track?.albumMid) : null
+    latest = { ...result, artworkThumbnail:showCover?artwork?.thumbnail||null:null, artworkColors:colorMode==='album'&&artwork?{magicColors:artwork.magicColors,pureColor:artwork.pureColor}:null, enabled, anyApp: options.anyApp, colorMode, showCover }
     sampledAt = Date.now()
     return latest
   })().finally(() => { inflight = null })
@@ -78,6 +85,7 @@ app.whenReady().then(() => {
     enabled = saved.enabled !== false
     options.anyApp = saved.anyApp === true
     colorMode = saved.colorMode === 'theme' ? 'theme' : 'album'
+    showCover = saved.showCover !== false
   } catch { /* first launch */ }
   ipcMain.handle('zcode-music:snapshot', event => {
     if (!trusted(event)) throw new Error('Untrusted music plugin sender')
@@ -85,14 +93,20 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('zcode-music:configure', (event, config) => {
     if (!trusted(event)) throw new Error('Untrusted music plugin sender')
+    if (config?.coverPreview === true) {
+      if (!enabled || !showCover || !paletteReader) return {albumMid:null,image:null}
+      const albumMid=latest?.track?.albumMid
+      return paletteReader.then(reader=>({albumMid,image:null,...reader.preview(albumMid)}))
+    }
+    if (typeof config?.showCover === 'boolean') showCover = config.showCover
     if (typeof config?.enabled === 'boolean') enabled = config.enabled
     if (typeof config?.anyApp === 'boolean') options.anyApp = config.anyApp
     if (['theme', 'album'].includes(config?.colorMode)) colorMode = config.colorMode
     latest = null
     mkdirSync(runtime.settingsDir || app.getPath('userData'), { recursive: true })
-    writeFileSync(settingsFile + '.tmp', JSON.stringify({ enabled, anyApp: options.anyApp, colorMode }))
+    writeFileSync(settingsFile + '.tmp', JSON.stringify({ enabled, anyApp: options.anyApp, colorMode, showCover }))
     renameSync(settingsFile + '.tmp', settingsFile)
-    return { enabled, anyApp: options.anyApp, colorMode }
+    return { enabled, anyApp: options.anyApp, colorMode, showCover }
   })
   ipcMain.handle('zcode-music:control', async (event, payload) => {
     if (!trusted(event)) throw new Error('Untrusted music plugin sender')
