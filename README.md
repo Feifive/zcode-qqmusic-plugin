@@ -56,9 +56,9 @@ npm run rollback
 npm run restore          # 卸载加载器，恢复匹配原包
 ```
 
-发布步骤：修改代码和 `package.json` 版本 → 写 `release/notes-<版本>.md` → `npm test` → `npm run release` → 提交源码与 `release/zcode-music-<版本>.json`。推送 main 后运行 `npm run publish:release`，通过本机已登录的 Git 凭据上传安装器和签名包，在全部资产上传后发布 Release。`ci/` 提供 GitHub Actions 模板；当前凭据没有 workflow 权限，模板尚未启用，具备权限后可放入 `.github/workflows/`。已正式发布的相同版本不会被替换，修正应提升版本号。
+发布步骤：修改代码和 `package.json` 版本 → 写 `release/notes-<版本>.md` → `npm test` → `npm run release` → 提交源码与 `release/zcode-music-<版本>.json`。推送 main 后 GitHub Actions 自动运行测试、打包安装器，并在全部资产上传后发布 Release。工作流位于 `.github/workflows/`。也可运行 `npm run publish:release`，通过本机已登录的 Git 凭据手动发布。已正式发布的相同版本不会被替换，修正应提升版本号。
 
-签名私钥 `.release-private-key.pem` 仅留在发布者本机，已被 Git 忽略，**不要提交或上传**。可以通过 `ZCODE_MUSIC_SIGNING_KEY_FILE` 指定另一处安全备份。务必备份原私钥；更换公钥需要安装新版加载器。发布工具只使用现有 GitHub 登录凭据，私钥不会上传。可选 GitHub Actions 也只打包已签好的插件，不需要保存发布私钥。
+签名私钥 `.release-private-key.pem` 仅留在发布者本机，已被 Git 忽略，**不要提交或上传**。可以通过 `ZCODE_MUSIC_SIGNING_KEY_FILE` 指定另一处安全备份。务必备份原私钥；更换公钥需要安装新版加载器。发布工具只使用现有 GitHub 登录凭据，私钥不会上传。GitHub Actions 也只打包已签好的插件，不需要保存发布私钥。
 
 `npm run build [原包路径]` 只用于开发验证固定加载器，默认读取 `backup/ZCode.app`。普通插件发布不运行这一步。安装器在目标电脑自己生成原包备份和加载器副本，不分发官方 ZCode 应用。
 
