@@ -17,6 +17,8 @@ let settingsFile
 let latest = null
 let sampledAt = 0
 let inflight
+let inflightRevision = -1
+let snapshotRevision = 0
 let reporter
 let previousMediaSample = null
 let mediaUtils
@@ -29,6 +31,7 @@ function trusted(event) {
   } catch { return false }
 }
 function run(args = []) {
+  const revision = snapshotRevision
   return new Promise(resolve => {
     execFile('/usr/bin/perl', [reader, helper], {
       timeout: 4500, maxBuffer: 64 * 1024,
@@ -38,8 +41,8 @@ function run(args = []) {
         let result = JSON.parse(stdout)
         if ((args[0] || 'snapshot') === 'snapshot') {
           mediaUtils ??= import(pathToFileURL(join(__dirname, 'lib/nowplaying.js')).href)
-          result = (await mediaUtils).normalizeMacSample(result, previousMediaSample)
-          previousMediaSample = result
+          result = (await mediaUtils).normalizeMacSample(result, revision === snapshotRevision ? previousMediaSample : null)
+          if (revision === snapshotRevision) previousMediaSample = result
         }
         resolve(result)
       }
@@ -50,8 +53,9 @@ function run(args = []) {
 async function snapshot() {
   if (!enabled) return { state: 'disabled', track: null, lyric: null, enabled, anyApp: options.anyApp, colorMode, showCover }
   if (latest && Date.now() - sampledAt < 1400) return latest
-  if (inflight) return inflight
-  inflight = (async () => {
+  if (inflight && inflightRevision === snapshotRevision) return inflight
+  const revision = snapshotRevision
+  const task = (async () => {
     reporter ??= import(pathToFileURL(join(__dirname, 'lib/playback.js')).href)
       .then(({ createPlaybackReporter }) => createPlaybackReporter({ options }))
     const sample = await run(['snapshot'])
@@ -61,11 +65,13 @@ async function snapshot() {
       import(pathToFileURL(join(__dirname, 'lib/native-artwork.js')).href),
     ]).then(([{createPaletteReader},{createArtworkDecoder}]) => createPaletteReader({decode:createArtworkDecoder(nativeImage)}))
     const artwork = (showCover || colorMode==='album') ? (await paletteReader).get(result.track?.albumMid) : null
+    if (revision !== snapshotRevision) return snapshot()
     latest = { ...result, artworkThumbnail:showCover?artwork?.thumbnail||null:null, artworkColors:colorMode==='album'&&artwork?{magicColors:artwork.magicColors,pureColor:artwork.pureColor}:null, enabled, anyApp: options.anyApp, colorMode, showCover }
     sampledAt = Date.now()
     return latest
-  })().finally(() => { inflight = null })
-  return inflight
+  })().finally(() => { if (inflight === task) inflight = null })
+  inflight = task; inflightRevision = revision
+  return task
 }
 app.whenReady().then(() => {
   settingsFile = runtime.settingsDir ? join(runtime.settingsDir, 'settings.json') : join(app.getPath('userData'), 'zcode-music-plugin.json')
@@ -95,6 +101,7 @@ app.whenReady().then(() => {
     if (typeof config?.anyApp === 'boolean') options.anyApp = config.anyApp
     if (['theme', 'album'].includes(config?.colorMode)) colorMode = config.colorMode
     latest = null
+    snapshotRevision++
     mkdirSync(runtime.settingsDir || app.getPath('userData'), { recursive: true })
     writeFileSync(settingsFile + '.tmp', JSON.stringify({ enabled, anyApp: options.anyApp, colorMode, showCover }))
     renameSync(settingsFile + '.tmp', settingsFile)
@@ -104,16 +111,32 @@ app.whenReady().then(() => {
     if (!trusted(event)) throw new Error('Untrusted music plugin sender')
     if (!enabled) return { ok: false, error: 'disabled' }
     if (!['toggle', 'next', 'prev', 'seek'].includes(payload?.action)) return { ok: false, error: 'bad-action' }
-    if (payload.action === 'seek') return { ok: false, error: 'seek-unavailable' }
+    if (payload.action === 'seek' && (!Number.isFinite(payload.positionMs) || payload.positionMs < 0 || payload.positionMs > 86400000)) return { ok: false, error: 'bad-position' }
     const { pickSession } = await import(pathToFileURL(join(__dirname, 'lib/nowplaying.js')).href)
     const sample = await run(['snapshot'])
     const session = pickSession(sample.sessions, options)
     if (!session) return { ok: false, error: 'no-player' }
     const action = payload.action === 'toggle' ? (session.status === 'playing' ? 'pause' : 'play') : payload.action
-    const result = await run([action, session.app])
+    const position = payload.action === 'seek' ? Math.min(Math.round(payload.positionMs), Number.isFinite(session.duration) && session.duration > 0 ? Math.round(session.duration) : 86400000) : undefined
+    let result = await run([action, session.app, position === undefined ? '0' : String(position)])
+    snapshotRevision++
+    latest = null
     // Read the confirmed post-command state now, so the next UI refresh does
     // not wait for the normal poll and can preserve the paused playhead.
-    if (result.ok) await run(['snapshot'])
+    if (result.ok) {
+      if (payload.action === 'seek') previousMediaSample = null
+      const confirmed = await run(['snapshot'])
+      if (payload.action === 'seek') {
+        const current = confirmed.sessions?.find(s => s.app === session.app)
+        if (!current || current.title !== session.title || current.artist !== session.artist) result = {ok:false,error:'player-changed'}
+        else if (current.status !== 'playing') {
+          const resumed = await run(['play', session.app])
+          if (!resumed.ok) result = {ok:false,error:'playback-not-started'}
+          else await run(['snapshot'])
+        }
+      }
+    }
+    snapshotRevision++
     latest = null
     return result
   })

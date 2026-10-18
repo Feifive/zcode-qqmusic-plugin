@@ -134,8 +134,8 @@ export function createPlaybackReporter({ options, log = () => {}, now = () => Da
       playing,
       positionMs: Number.isFinite(session.position) ? Math.max(0, session.position) : 0,
       durationMs: Number.isFinite(session.duration) ? Math.max(0, session.duration) : 0,
-      // The app decides whether the system may move the playhead.
-      seekable: session.seek === true,
+      // Offer seeking for a known duration; confirm support from the result.
+      seekable: session.seek === true || (Number.isFinite(session.duration) && session.duration > 0),
     }
     const payload = { ...base, state: playing ? 'playing' : 'paused', track }
 

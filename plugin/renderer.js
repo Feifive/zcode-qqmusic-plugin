@@ -7,6 +7,7 @@
   const { wordTextRanges, sweepPositionAt, followWordOffset } = await import(new URL('./lyric-timing.js', scriptURL).href)
   const { paletteForArtwork, relativeLuminance } = await import(new URL('./lib/colors.js', scriptURL).href)
   const { inlinePNG, coverPreviewLayout, createCoverPreview } = await import(new URL('./lib/cover.js', scriptURL).href)
+  const { seekRatio, createSeekInteraction } = await import(new URL('./lib/seek.js', scriptURL).href)
   const host = document.createElement('div')
   host.id = 'zcode-music-plugin'
   host.hidden = true
@@ -19,7 +20,7 @@
         <button data-action="prev" aria-label="上一首" title="上一首"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 5v14M19 5 9 12l10 7V5Z"/></svg></button>
         <button data-action="toggle" aria-label="播放" title="播放"><svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 11 7-11 7V5Z"/></svg><svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5v14M15 5v14"/></svg></button>
         <button data-action="next" aria-label="下一首" title="下一首"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 5v14M5 5l10 7-10 7V5Z"/></svg></button>
-      </div></div><div class="progress"><i></i></div>
+      </div></div><div class="progress" role="slider" aria-label="播放进度" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true" tabindex="-1"><i></i></div>
     </div>
     <div class="idle" aria-hidden="true"></div>
     <button class="launcher" title="QQ 音乐歌词设置" aria-label="QQ 音乐歌词设置" aria-expanded="false">♪</button>
@@ -39,6 +40,7 @@
   const dock = $('.dock'), viewport = $('.lyric'), line = $('.lyric span'), status = $('.status')
   let data = { state: 'starting' }, demo = false, disposed = false, timer, surface, lineKey = '', lastTrack = ''
   let busy = false, configuring = 0
+  let refreshTicket = 0, pointerId = null
   let geometryDirty = true, measuredWords = [], textWidth = 0, viewportWidth = 0
   $('link').addEventListener('load', () => { geometryDirty = true })
   document.fonts?.ready.then(() => { geometryDirty = true })
@@ -137,6 +139,43 @@
   window.addEventListener('resize', hideCoverPreview)
   document.addEventListener('scroll', hideCoverPreview, true)
   const fmt = ms => { const seconds = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` }
+  const playbackPosition = snapshot => Math.max(0,Math.min(snapshot.track?.durationMs || Infinity,(snapshot.track?.positionMs || 0)+(snapshot.track?.playing?Math.max(0,Date.now()-(snapshot.sampledAt||Date.now())):0)))
+  const seek = createSeekInteraction({
+    getContext: () => ({track:data.track,available:!demo&&!busy&&!host.hidden&&$('.enabled').checked&&data.state!=='disabled'}),
+    send: position => { refreshTicket++; return api.control('seek',position) },
+    onSettled: refresh,
+    onFailure: () => { status.textContent='定位失败，请在 QQ 音乐中操作'; togglePanel(true) },
+  })
+  const progress = $('.progress')
+  function releasePointer() {
+    const id=pointerId;pointerId=null
+    if(id!==null&&progress.hasPointerCapture(id))progress.releasePointerCapture(id)
+  }
+  function cancelScrub() { seek.cancel();releasePointer() }
+  progress.onpointerdown = event => {
+    if(event.button!==0||event.isPrimary===false||!seek.begin(seekRatio(event.clientX,progress.getBoundingClientRect())))return
+    event.preventDefault();hideCoverPreview();pointerId=event.pointerId
+    try{progress.setPointerCapture(pointerId)}catch{ /* document listeners retain the gesture within the window */ }
+    paint()
+  }
+  const moveScrub = event => { if(event.pointerId===pointerId){seek.move(seekRatio(event.clientX,progress.getBoundingClientRect()));paint()} }
+  const finishScrub = event => {
+    if(event.pointerId!==pointerId)return
+    const result=seek.finish(seekRatio(event.clientX,progress.getBoundingClientRect()))
+    releasePointer();paint();result.catch(()=>{status.textContent='定位失败，请在 QQ 音乐中操作';togglePanel(true)})
+  }
+  const cancelPointer = event => { if(event.pointerId===pointerId)cancelScrub() }
+  document.addEventListener('pointermove',moveScrub)
+  document.addEventListener('pointerup',finishScrub)
+  document.addEventListener('pointercancel',cancelPointer)
+  progress.addEventListener('lostpointercapture',cancelPointer)
+  window.addEventListener('blur',cancelScrub)
+  progress.onkeydown = event => {
+    const position=playbackPosition(data),targets={ArrowLeft:position-5000,ArrowRight:position+5000,Home:0,End:data.track?.durationMs}
+    if(!(event.key in targets))return
+    event.preventDefault()
+    if(seek.enabled)seek.keyboard(targets[event.key]).catch(()=>{status.textContent='定位失败，请在 QQ 音乐中操作';togglePanel(true)})
+  }
   function togglePanel(open = $('.panel').hidden) {
     hideCoverPreview()
     $('.panel').hidden = !open
@@ -203,7 +242,7 @@
   }
   shadow.querySelectorAll('[data-action]').forEach(button => {
     button.onclick = async () => {
-      if (demo || busy) return
+      if (demo || busy || seek.busy || seek.dragging) return
       busy = true
       shadow.querySelectorAll('[data-action]').forEach(b => { b.disabled = true })
       try {
@@ -221,7 +260,7 @@
     const hidden = !surface || timeline?.getAttribute('data-following') === 'false'
     if (host.hidden === hidden) return
     host.hidden = hidden
-    if (hidden) togglePanel(false)
+    if (hidden) { cancelScrub();togglePanel(false) }
     else { geometryDirty = true; colorCheckAt = 0 }
   }
   const followObserver = new MutationObserver(syncDockVisibility)
@@ -245,8 +284,11 @@
   }
   async function refresh() {
     if (disposed) return
+    const ticket=++refreshTicket
     try {
-      data = await api.snapshot()
+      const next=await api.snapshot()
+      if(ticket!==refreshTicket||disposed)return
+      data = next
       if (!configuring) {
         $('.color-mode').value = data.colorMode === 'theme' ? 'theme' : 'album'
         $('.show-cover').checked = data.showCover !== false
@@ -256,7 +298,7 @@
         $('.enabled').checked = data.enabled !== false
         $('.any-app').checked = data.anyApp === true
       }
-    } catch { data = { state: 'error' }; status.textContent = messages.error }
+    } catch { if(ticket!==refreshTicket||disposed)return;data = { state: 'error' }; status.textContent = messages.error }
     paint()
     clearTimeout(timer)
     if (!disposed) timer = setTimeout(refresh, document.hidden ? 10000 : 2000)
@@ -269,7 +311,8 @@
     const visible = Boolean(track) && snapshot.state !== 'disabled'
     dock.hidden = !visible
     $('.idle').hidden = visible
-    if (!visible) { hideCoverPreview(); return }
+    if (!visible) { cancelScrub();hideCoverPreview(); return }
+    if(pointerId!==null&&!seek.dragging)releasePointer()
     paintCover(snapshot)
     const id = `${demo}:${track.title}:${track.artist}`
     if (lastTrack !== id) {
@@ -277,8 +320,7 @@
       $('.track').title = `${track.title} — ${track.artist || 'QQ 音乐'}`
       lastTrack = id
     }
-    const age = Date.now() - (snapshot.sampledAt || Date.now())
-    const position = demo ? (Date.now() - demoStart) % 32000 : Math.min(track.durationMs || Infinity, track.positionMs + (track.playing ? Math.max(0, age) : 0))
+    const position = demo ? (Date.now() - demoStart) % 32000 : seek.preview() ?? playbackPosition(snapshot)
     const time = position - (snapshot.lyric?.offset || 0)
     const lines = snapshot.lyric?.lines || []
     let index = -1
@@ -325,12 +367,18 @@
     }
     const timeText = `${fmt(position)} / ${fmt(track.durationMs)}`
     if ($('.time').textContent !== timeText) $('.time').textContent = timeText
-    $('.progress i').style.width = `${Math.min(100, Math.max(0, position / (track.durationMs || Infinity) * 100))}%`
+    const percent = `${Math.min(100, Math.max(0, position / (track.durationMs || Infinity) * 100))}%`
+    progress.querySelector('i').style.width = percent
+    progress.style.setProperty('--thumb-x',percent)
+    progress.classList.toggle('scrubbing',seek.dragging)
+    progress.classList.toggle('seeking',seek.busy)
+    dock.classList.toggle('scrubbing',seek.dragging||seek.busy)
+    for(const [attribute,value] of Object.entries({'aria-valuemax':Math.round(track.durationMs||0),'aria-valuenow':Math.round(position),'aria-valuetext':timeText,'aria-disabled':!seek.enabled,'tabindex':seek.enabled?0:-1}))if(progress.getAttribute(attribute)!==String(value))progress.setAttribute(attribute,String(value))
     dock.classList.toggle('playing', track.playing)
     const toggle = $('.controls [data-action="toggle"]')
     const label = track.playing ? '暂停' : '播放'
     if (toggle.title !== label) { toggle.title = label; toggle.setAttribute('aria-label', label) }
-    shadow.querySelectorAll('[data-action]').forEach(b => { if (b.disabled !== (demo || busy)) b.disabled = demo || busy })
+    shadow.querySelectorAll('[data-action]').forEach(b => { const disabled=demo||busy||seek.busy||seek.dragging;if(b.disabled!==disabled)b.disabled=disabled })
   }
   // Observe React navigation without reaching into React's internal state.
   const observer = new MutationObserver(mount)
@@ -347,6 +395,11 @@
   window.addEventListener('pagehide', () => {
     disposed = true; clearTimeout(timer); cancelAnimationFrame(frame); observer.disconnect(); followObserver.disconnect(); resize.disconnect(); lyricResize.disconnect()
     hideCoverPreview()
+    cancelScrub()
+    document.removeEventListener('pointermove',moveScrub)
+    document.removeEventListener('pointerup',finishScrub)
+    document.removeEventListener('pointercancel',cancelPointer)
+    window.removeEventListener('blur',cancelScrub)
     window.removeEventListener('resize', hideCoverPreview)
     document.removeEventListener('scroll', hideCoverPreview, true)
     document.fonts?.removeEventListener('loadingdone', onFontsLoaded)
