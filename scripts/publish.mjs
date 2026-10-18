@@ -19,13 +19,16 @@ const {version}=JSON.parse(readFileSync('package.json'))
 const api='https://api.github.com/repos/'+repo
 const headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'}
 async function request(url,method='GET',body){const r=await fetch(url,{method,redirect:'error',headers:{...headers,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});if(!r.ok)throw Error('GitHub release request failed: '+r.status);return r.json()}
-const identity=await request('https://api.github.com/user')
-if(identity.login!=='Feifive')throw Error('Publishing credential does not belong to Feifive')
+if(!process.env.GITHUB_REPOSITORY){
+ if(execFileSync('git',['status','--porcelain','--untracked-files=no'],{encoding:'utf8'}).trim())throw Error('Commit tracked changes before publishing')
+ const identity=await request('https://api.github.com/user')
+ if(identity.login!=='Feifive')throw Error('Publishing credential does not belong to Feifive')
+}
 const existing=await fetch(api+'/releases/tags/v'+version,{headers,redirect:'error'})
 let release
 if(existing.ok){release=await existing.json();if(!release.draft){console.log('Release v'+version+' is already published; immutable version left unchanged.');process.exit(0)}}
 else if(existing.status!==404)throw Error('Cannot check existing release: '+existing.status)
-if(!release)release=await request(api+'/releases','POST',{tag_name:'v'+version,target_commitish:process.env.GITHUB_SHA,name:'ZCode Music '+version,draft:true,body:readFileSync(`release/notes-${version}.md`,'utf8')})
+if(!release)release=await request(api+'/releases','POST',{tag_name:'v'+version,target_commitish:process.env.GITHUB_SHA||execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),name:'ZCode Music '+version,draft:true,body:readFileSync(`release/notes-${version}.md`,'utf8')})
 for(const [name,file,type]of [[`zcode-music-${version}.json`,`release/zcode-music-${version}.json`,'application/json'],[`ZCode-Music-Installer-${version}-macOS.zip`,`dist/ZCode-Music-Installer-${version}-macOS.zip`,'application/zip']]){
  const bytes=readFileSync(file),sha='sha256:'+createHash('sha256').update(bytes).digest('hex'),old=release.assets?.find(a=>a.name===name)
  if(old){if(old.digest!==sha)throw Error('Draft contains a different asset; inspect the draft before retrying: '+name);continue}

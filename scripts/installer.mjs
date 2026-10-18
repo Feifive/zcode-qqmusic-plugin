@@ -13,7 +13,7 @@ for(const [name,entry]of Object.entries(manifest.files)){
 }
 const app=join(root,'dist/ZCode Music Installer.app'),contents=join(app,'Contents'),resources=join(contents,'Resources')
 rmSync(app,{recursive:true,force:true});mkdirSync(join(contents,'MacOS'),{recursive:true});mkdirSync(resources,{recursive:true})
-for(const name of ['scripts','loader','plugin/preload.cjs'])cpSync(join(root,name),join(resources,name),{recursive:true,dereference:true})
+for(const name of ['scripts/manage.mjs','scripts/asar.mjs','scripts/lib/patch.mjs','loader','plugin/preload.cjs'])cpSync(join(root,name),join(resources,name),{recursive:true,dereference:true})
 mkdirSync(join(resources,'dist'));cpSync(bundleFile,join(resources,'dist/runtime.json'))
 writeFileSync(join(resources,'package.json'),JSON.stringify({type:'module'}))
 writeFileSync(join(contents,'Info.plist'),`<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>io.github.feifive.zcode-music-installer</string><key>CFBundleName</key><string>ZCode Music Installer</string><key>CFBundleExecutable</key><string>installer</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>${version}</string><key>LSMinimumSystemVersion</key><string>12.0</string><key>NSHighResolutionCapable</key><true/></dict></plist>`)
