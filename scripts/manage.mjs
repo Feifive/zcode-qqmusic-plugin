@@ -1,4 +1,4 @@
-import {openSync,closeSync,existsSync,readFileSync,writeFileSync,mkdirSync,renameSync,rmSync,copyFileSync} from 'node:fs'
+import {openSync,closeSync,existsSync,readFileSync,writeFileSync,mkdirSync,renameSync,rmSync} from 'node:fs'
 import {join,resolve,dirname} from 'node:path'
 import {homedir} from 'node:os'
 import {fileURLToPath} from 'node:url'
@@ -13,8 +13,8 @@ import {createUpdater} from '../loader/updates.cjs'
 process.noAsar = true
 const project=fileURLToPath(new URL('..',import.meta.url))
 const argv=process.argv.slice(2),command=argv[0]||'install'
-const option=name=>{const i=argv.indexOf('--'+name);return i<0?null:argv[i+1]}
-const app=resolve(option('app')||'/Applications/ZCode.app')
+if(argv.length>1&&(argv.length!==3||argv[1]!=='--app'||!argv[2]))throw Error('Usage: manage.mjs <command> [--app /absolute/path/to/ZCode.app]')
+const app=resolve(argv[2]||'/Applications/ZCode.app')
 const root=join(homedir(),'Library/Application Support/ZCode Music')
 const recordFile=join(root,'installation.json'),activeFile=join(root,'active.json')
 const key=readFileSync(join(project,'loader/release-key.pem'),'utf8')
@@ -45,11 +45,11 @@ async function main(){
  }
  if(command==='rollback'){const version=store.rollback(root,key,current.version);return{message:'已回退至 '+version+'，重新打开 ZCode 后生效'}}
  if(command==='uninstall'){
-  if(!loaded&&!current.main.includes('zcode-music/main.cjs'))return{message:'ZCode 当前没有加载器，备份和设置已保留'}
+  if(!loaded)return{message:'ZCode 当前没有加载器，备份和设置已保留'}
   if(!record||record.patchedHash!==current.sha)throw Error('ZCode 已被其它版本修改，拒绝覆盖。请用对应版本的官方安装包恢复。')
   closed()
   const original=inspect(record.backup)
-  if(original.sha!==record.originalHash)throw Error('原包备份校验失败')
+  if(original.version!==current.version||original.sha!==record.originalHash)throw Error('原包备份校验失败')
   const stage=join(dirname(app),'.ZCode.music-restore-'+randomUUID()+'.app')
   try{run('/usr/bin/ditto',[record.backup,stage]);replaceApp(stage)}finally{rmSync(stage,{recursive:true,force:true})}
   return{message:'已卸载加载器并恢复原包，插件设置和版本备份已保留'}
@@ -57,7 +57,7 @@ async function main(){
  if(!['install','repair'].includes(command))throw Error('Unknown command')
  const bundle=JSON.parse(readFileSync(join(project,'dist/runtime.json'),'utf8'))
  store.verifyManifest(bundle,key,current.version)
- // If a compatible loader is already installed, only activate the external payload.
+ // An intact fixed loader only needs the external payload activated.
  if(loaded&&record?.patchedHash===current.sha){
   const pinned=readEntry(current.archive,'out/main/zcode-music-loader/release-key.pem').toString()
   if(pinned!==key)throw Error('加载器发布密钥不同，请使用原发布者的安装器')
@@ -66,11 +66,11 @@ async function main(){
  }
  closed()
  let source=app,original=current
- if(loaded||current.main.includes('zcode-music/main.cjs')){
-  const candidates=[option('backup'),record?.backup,join(project,'backup/ZCode.app')].filter(Boolean)
-  source=candidates.find(p=>existsSync(asar(p)))
-  if(!source)throw Error('LEGACY_BACKUP_REQUIRED: 检测到旧版插件，请选择原始备份 backup/ZCode.app')
+ if(loaded){
+  if(!record?.backup)throw Error('缺少加载器安装记录，请重新安装官方 ZCode 后运行安装器')
+  source=record.backup
   original=inspect(source)
+  if(original.version!==current.version||original.sha!==record.originalHash)throw Error('加载器原包备份校验失败')
  }
  const patched=patchLoader(original.bytes,project)
  const backup=join(root,'backups',original.version+'-'+original.sha.slice(0,12),'ZCode.app')

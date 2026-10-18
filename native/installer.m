@@ -2,7 +2,6 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 static NSString *selectedApp;
-static NSString *selectedBackup;
 static NSString *chooseApp(NSString *message) {
   NSOpenPanel *panel=[NSOpenPanel openPanel];
   panel.message=message; panel.canChooseFiles=YES;panel.canChooseDirectories=NO;panel.allowsMultipleSelection=NO;
@@ -22,7 +21,6 @@ static void execute(NSString *action) {
     @try {
       NSTask *task=[NSTask new];task.executableURL=[NSURL fileURLWithPath:runtime];
       NSMutableArray *args=[NSMutableArray arrayWithArray:@[[[[NSBundle mainBundle]resourcePath]stringByAppendingPathComponent:@"scripts/manage.mjs"],action,@"--app",selectedApp]];
-      if(selectedBackup)[args addObjectsFromArray:@[@"--backup",selectedBackup]];
       task.arguments=args;
       NSMutableDictionary *environment=[[[NSProcessInfo processInfo]environment]mutableCopy];environment[@"ELECTRON_RUN_AS_NODE"]=@"1";task.environment=environment;
       NSPipe *pipe=[NSPipe pipe];task.standardOutput=pipe;task.standardError=pipe;
@@ -33,7 +31,6 @@ static void execute(NSString *action) {
     dispatch_async(dispatch_get_main_queue(),^{[NSApp abortModal];[progress.window orderOut:nil];});
   });
   [progress runModal];
-  if([result containsString:@"LEGACY_BACKUP_REQUIRED"]){selectedBackup=chooseApp(@"请选择第一次安装插件时备份的原始 ZCode.app（backup/ZCode.app）");if(selectedBackup)execute(action);return;}
   NSAlert *done=[NSAlert new];done.messageText=status==0?@"处理完成":@"操作未完成";
   NSData *data=[result dataUsingEncoding:NSUTF8StringEncoding];NSDictionary *json=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;
   done.informativeText=json[@"message"]?:result?:@"未知错误";

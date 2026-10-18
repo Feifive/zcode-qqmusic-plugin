@@ -63,7 +63,7 @@ export function normalizeTitle(value) {
 function singersOf(song) {
   const names = Array.isArray(song?.singer) ? song.singer.map(entry => entry?.name ?? '')
     : typeof song?.singer === 'string' ? [song.singer] : []
-  // The legacy API sometimes puts all performers in one singer.name field.
+  // Search results can put all performers in one singer.name field.
   // Do not split '/' — it is part of real names such as K/DA and AC/DC.
   return names.flatMap(name => name.split(/[;；]/)).map(name => name.trim()).filter(Boolean)
 }

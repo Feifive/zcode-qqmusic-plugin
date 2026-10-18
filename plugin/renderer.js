@@ -3,7 +3,7 @@
   window.__zcodeMusicDock = true
   const api = window.zcodeMusic
   if (!api) return
-  const scriptURL = document.currentScript?.src || new URL('./zcode-music.js', location.href).href
+  const scriptURL = document.currentScript.src
   const { wordTextRanges, sweepPositionAt, followWordOffset } = await import(new URL('./lyric-timing.js', scriptURL).href)
   const { paletteForArtwork, relativeLuminance } = await import(new URL('./lib/colors.js', scriptURL).href)
   const { inlinePNG, coverPreviewLayout, createCoverPreview } = await import(new URL('./lib/cover.js', scriptURL).href)

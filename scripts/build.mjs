@@ -3,7 +3,8 @@ import {readFileSync,writeFileSync,mkdirSync} from 'node:fs'
 import {join,resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {patchLoader} from './lib/patch.mjs'
-const root=fileURLToPath(new URL('..',import.meta.url)),app=resolve(process.argv[2]||'backup/ZCode.app')
+if(!process.argv[2])throw Error('Usage: npm run build -- /absolute/path/to/ZCode.app')
+const root=fileURLToPath(new URL('..',import.meta.url)),app=resolve(process.argv[2])
 const result=patchLoader(readFileSync(join(app,'Contents/Resources/app.asar')),root)
 mkdirSync(join(root,'dist'),{recursive:true})
 writeFileSync(join(root,'dist/app.asar'),result.buffer)

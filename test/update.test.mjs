@@ -66,6 +66,7 @@ test('untrusted redirect hosts, huge responses, invalid signatures and missing r
 })
 test('fixed loader runtime and update IPC reject subframes and remote frames',async()=>{
  const handlers=new Map(),frame={url:'file:///app/out/renderer/index.html'},app={getVersion:()=> '3.15.3',whenReady:()=>Promise.resolve()}
+ let started
  const require=name=>{
   if(name==='electron')return{app,ipcMain:{handle:(n,f)=>handlers.set(n,f)}}
   if(name==='node:fs')return{readFileSync:()=>key}
@@ -74,11 +75,12 @@ test('fixed loader runtime and update IPC reject subframes and remote frames',as
   if(name==='node:url')return{fileURLToPath:u=>u.pathname,pathToFileURL:p=>new URL('file://'+p)}
   if(name==='./store.cjs')return{selectRuntime:()=>({dir:'/version',manifest:{version:'0.3.0'}})}
   if(name==='./updates.cjs')return{createUpdater:()=>({status:()=>({version:'0.3.0'})})}
-  if(name==='/version/plugin/main.cjs')return()=>{}
+  if(name==='/version/plugin/main.cjs')return runtime=>{started=runtime}
   throw Error(name)
  }
  vm.runInNewContext(readFileSync(new URL('../loader/main.cjs',import.meta.url),'utf8'),{require,__dirname:'/app/out/main/zcode-music-loader',console,URL,setTimeout})
  await Promise.resolve()
+ assert.deepEqual(JSON.parse(JSON.stringify(started)),{runtimeDir:'/version',rendererPath:'/app/out/renderer/index.html',settingsDir:'/user/Library/Application Support/ZCode Music'})
  for(const event of [{senderFrame:{url:frame.url},sender:{mainFrame:frame}},{senderFrame:{url:'https://evil.example'},sender:{mainFrame:frame}}]){
   assert.throws(()=>handlers.get('zcode-music:runtime')(event),/Untrusted/)
   await assert.rejects(handlers.get('zcode-music:update')(event,'install'),/Untrusted/)

@@ -1,19 +1,18 @@
-module.exports = function start(runtime = {}) {
+module.exports = function start({ runtimeDir, rendererPath, settingsDir }) {
 const { app, ipcMain, nativeImage } = require('electron')
 const { execFile } = require('node:child_process')
 const { pathToFileURL, fileURLToPath } = require('node:url')
-const { join, resolve } = require('node:path')
+const { join } = require('node:path')
 const { readFileSync, writeFileSync, renameSync, mkdirSync } = require('node:fs')
 
-const rendererPath = runtime.rendererPath || resolve(__dirname, '../../renderer/index.html')
-const nativeDir = runtime.runtimeDir ? join(runtime.runtimeDir, 'native') : join(app.getAppPath() + '.unpacked', 'out/main/zcode-music')
+const nativeDir = join(runtimeDir, 'native')
 const helper = join(nativeDir, 'now-playing.dylib')
 const reader = join(nativeDir, 'reader.pl')
 const options = { apps: ['qqmusic'], anyApp: false, pollMs: 2000 }
 let enabled = true
 let colorMode = 'album'
 let showCover = true
-let settingsFile
+const settingsFile = join(settingsDir, 'settings.json')
 let latest = null
 let sampledAt = 0
 let inflight
@@ -74,12 +73,8 @@ async function snapshot() {
   return task
 }
 app.whenReady().then(() => {
-  settingsFile = runtime.settingsDir ? join(runtime.settingsDir, 'settings.json') : join(app.getPath('userData'), 'zcode-music-plugin.json')
   try {
-    let text
-    try { text = readFileSync(settingsFile, 'utf8') }
-    catch { text = readFileSync(join(app.getPath('userData'), 'zcode-music-plugin.json'), 'utf8') }
-    const saved = JSON.parse(text)
+    const saved = JSON.parse(readFileSync(settingsFile, 'utf8'))
     enabled = saved.enabled !== false
     options.anyApp = saved.anyApp === true
     colorMode = saved.colorMode === 'theme' ? 'theme' : 'album'
@@ -102,7 +97,7 @@ app.whenReady().then(() => {
     if (['theme', 'album'].includes(config?.colorMode)) colorMode = config.colorMode
     latest = null
     snapshotRevision++
-    mkdirSync(runtime.settingsDir || app.getPath('userData'), { recursive: true })
+    mkdirSync(settingsDir, { recursive: true })
     writeFileSync(settingsFile + '.tmp', JSON.stringify({ enabled, anyApp: options.anyApp, colorMode, showCover }))
     renameSync(settingsFile + '.tmp', settingsFile)
     return { enabled, anyApp: options.anyApp, colorMode, showCover }

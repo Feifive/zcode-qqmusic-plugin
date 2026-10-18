@@ -22,7 +22,7 @@ export function readEntry(archive, path) {
   if (!value || value.unpacked || value.link) throw new Error(`Not a packed file: ${path}`)
   return archive.data.subarray(Number(value.offset), Number(value.offset) + value.size)
 }
-export function patchAsar(source, replacements, unpacked = new Map()) {
+export function patchAsar(source, replacements) {
   const { header, data } = parseAsar(source)
   const buffers = [data]
   let offset = data.length
@@ -35,10 +35,6 @@ export function patchAsar(source, replacements, unpacked = new Map()) {
     parent.files[name] = { size: content.length, offset: String(offset), integrity: { algorithm: 'SHA256', hash: hash(content), blockSize, blocks } }
     buffers.push(content)
     offset += content.length
-  }
-  for (const [path, content] of unpacked) {
-    const { parent, name } = entry(header, path, true)
-    parent.files[name] = { size: content.length, unpacked: true }
   }
   const json = Buffer.from(JSON.stringify(header))
   const pad = (4 - json.length % 4) % 4

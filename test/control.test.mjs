@@ -10,14 +10,14 @@ async function boot(queue,saved={enabled:true,colorMode:'theme',showCover:false}
  const handlers=new Map(),calls=[]
  const frame={url:pathToFileURL(renderer).href},event={senderFrame:frame,sender:{mainFrame:frame}}
  const require=name=>{
-  if(name==='electron')return{app:{whenReady:()=>Promise.resolve(),getAppPath:()=>'/official',getPath:()=>'/settings'},ipcMain:{handle:(name,fn)=>handlers.set(name,fn)}}
+  if(name==='electron')return{app:{whenReady:()=>Promise.resolve()},ipcMain:{handle:(name,fn)=>handlers.set(name,fn)}}
   if(name==='node:child_process')return{execFile:(_exe,_args,options,callback)=>{calls.push(options.env);assert.ok(queue.length,'Unexpected helper execution');queueMicrotask(()=>callback(null,JSON.stringify(queue.shift())))}}
   if(name==='node:fs')return{readFileSync:()=>JSON.stringify(saved),mkdirSync(){},writeFileSync(){},renameSync(){}}
   if(name==='node:url')return{pathToFileURL,fileURLToPath}
   if(name==='node:path')return{join,resolve:()=>renderer}
   throw Error(name)
  }
- vm.runInNewContext(readFileSync(join(directory,'main.cjs'),'utf8')+'\nmodule.exports()', {module:{exports:null},require,__dirname:directory,console,Date,URL,process:{env:{}}},{importModuleDynamically:vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER})
+ vm.runInNewContext(readFileSync(join(directory,'main.cjs'),'utf8')+'\nmodule.exports({runtimeDir:"/runtime",rendererPath:"/official/renderer/index.html",settingsDir:"/settings"})', {module:{exports:null},require,__dirname:directory,console,Date,URL,process:{env:{}}},{importModuleDynamically:vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER})
  await Promise.resolve()
  return{calls,event,control:(payload,source=event)=>handlers.get('zcode-music:control')(source,payload),snapshot:()=>handlers.get('zcode-music:snapshot')(event)}
 }

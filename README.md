@@ -1,8 +1,8 @@
 # ZCode QQ 音乐歌词插件
 
-在 ZCode 聊天输入框上方显示 QQ 音乐同步歌词。当前 **0.3.4**，适配官方 **ZCode macOS 3.15.3**。
+在 ZCode 聊天输入框上方显示 QQ 音乐同步歌词。当前 **0.3.5**，适配官方 **ZCode macOS 3.15.3**。
 
-[下载安装器](https://github.com/Feifive/zcode-qqmusic-plugin/releases/latest) · [安装与迁移说明](INSTALL-OTHER-MAC.md)
+[下载安装器](https://github.com/Feifive/zcode-qqmusic-plugin/releases/latest) · [安装说明](INSTALL-OTHER-MAC.md)
 
 ## 安装和升级
 
@@ -11,8 +11,6 @@
 首次安装会备份官方原包，在 ZCode 中安装固定加载器。歌词、界面、配色和媒体读取库放在独立目录，之后在歌词设置点击「检查更新 → 更新并重启」即可，**普通插件升级不修改、复制或重新签名 ZCode.app**。升级保留设置与上一版本，可在设置里回退。点击输入框上方最右侧固定的 ♪ 打开歌词设置，歌名仅展示歌曲信息。也可使用安装器检查更新、修复或卸载。
 
 ZCode 官方升级可能覆盖加载器；需要使用适配该官方版本的安装器修复。当前不会尝试修改未经验证的 ZCode 版本。首次安装仍会修改原厂应用签名，安装器与修改后的 ZCode 使用本机临时签名；安装器尚未使用 Apple Developer ID 公证。插件更新签名与 Apple 公证是不同机制。
-
-从旧版 0.2.x 迁移时，保留第一次安装生成的 `backup/ZCode.app`；安装器需要时会提示选择。完成迁移后备份放到固定目录，不再依赖源码文件夹。
 
 ## 功能
 
@@ -29,12 +27,12 @@ ZCode 官方升级可能覆盖加载器；需要使用适配该官方版本的�
 ## 加载与更新设计
 
 ```text
-ZCode.app 中的固定加载器（首次安装或兼容性修复）
+ZCode.app 中的固定加载器（首次安装或修复）
                 ↓ 验证签名与文件哈希
 ~/Library/Application Support/ZCode Music/
   active.json                 当前版本 / 上一版本，原子切换
-  versions/0.3.4/             主进程、界面、媒体库与签名清单
-  settings.json              偏好设置，兼容读取旧版设置
+  versions/0.3.5/             主进程、界面、媒体库与签名清单
+  settings.json              插件偏好设置
   backups/<官方版本>-<哈希>/   原始官方 ZCode.app
   installation.json          加载器安装记录
 ```
@@ -51,19 +49,19 @@ ZCode.app 中的固定加载器（首次安装或兼容性修复）
 npm test
 npm run release          # 编译 universal 媒体库并签名插件发布包
 npm run pack:installer   # 生成约百 KB 的 universal 双击安装器
-npm run pack:source      # 生成源码迁移包
-npm run install:app      # 从旧版迁移或安装固定加载器
+npm run pack:source      # 生成源码包，仅包含当前签名发布包
+npm run install:app      # 安装固定加载器或更新外置插件
 npm run status
 npm run update
 npm run rollback
-npm run restore          # 卸载加载器，恢复匹配原包
+npm run uninstall        # 卸载加载器，恢复匹配原包
 ```
 
 发布步骤：修改代码和 `package.json` 版本 → 写 `release/notes-<版本>.md` → `npm test` → `npm run release` → 提交源码与 `release/zcode-music-<版本>.json`。推送 main 后 GitHub Actions 自动运行测试、打包安装器，并在全部资产上传后发布 Release。工作流位于 `.github/workflows/`。也可运行 `npm run publish:release`，通过本机已登录的 Git 凭据手动发布。已正式发布的相同版本不会被替换，修正应提升版本号。
 
 签名私钥 `.release-private-key.pem` 仅留在发布者本机，已被 Git 忽略，**不要提交或上传**。可以通过 `ZCODE_MUSIC_SIGNING_KEY_FILE` 指定另一处安全备份。务必备份原私钥；更换公钥需要安装新版加载器。发布工具只使用现有 GitHub 登录凭据，私钥不会上传。GitHub Actions 也只打包已签好的插件，不需要保存发布私钥。
 
-`npm run build [原包路径]` 只用于开发验证固定加载器，默认读取 `backup/ZCode.app`。普通插件发布不运行这一步。安装器在目标电脑自己生成原包备份和加载器副本，不分发官方 ZCode 应用。
+`npm run build -- /绝对路径/ZCode.app` 只用于开发验证固定加载器，必须显式指定未修改的官方应用。普通插件发布不运行这一步。安装器在目标电脑自己生成原包备份和加载器副本，不分发官方 ZCode 应用。
 
 ## 验证与限制
 

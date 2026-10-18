@@ -4,22 +4,29 @@ import {readFileSync} from 'node:fs'
 import vm from 'node:vm'
 
 async function boot(saved){
- const handlers=new Map();let persisted=saved
+ const handlers=new Map(),reads=[];let persisted=saved
  const path='/official/app.asar/out/renderer/index.html'
- const app={whenReady:()=>Promise.resolve(),getAppPath:()=>'/official/app.asar',getPath:()=>'/settings'}
+ const app={whenReady:()=>Promise.resolve()}
  const require=name=>{
   if(name==='electron')return{app,ipcMain:{handle:(key,fn)=>handlers.set(key,fn)}}
   if(name==='node:child_process')return{execFile:()=>{throw Error('Unexpected media control')}}
-  if(name==='node:fs')return{readFileSync:()=>persisted,mkdirSync(){},writeFileSync:(_file,text)=>{persisted=text},renameSync(){}}
+  if(name==='node:fs')return{readFileSync:file=>{reads.push(file);if(persisted===undefined)throw Error('Missing settings');return persisted},mkdirSync(){},writeFileSync:(_file,text)=>{persisted=text},renameSync(){}}
   if(name==='node:url')return{fileURLToPath:u=>u.pathname,pathToFileURL:p=>new URL('file://'+p)}
   if(name==='node:path')return{join:(...parts)=>parts.join('/'),resolve:()=>path}
   throw Error(name)
  }
- vm.runInNewContext(readFileSync(new URL('../plugin/main.cjs',import.meta.url),'utf8')+'\nmodule.exports()',{module:{exports:null},require,__dirname:'/official/app.asar/out/main/zcode-music',console,Date,URL})
+ vm.runInNewContext(readFileSync(new URL('../plugin/main.cjs',import.meta.url),'utf8')+'\nmodule.exports({runtimeDir:"/runtime",rendererPath:"/official/app.asar/out/renderer/index.html",settingsDir:"/settings"})',{module:{exports:null},require,__dirname:'/runtime/plugin',console,Date,URL})
  await Promise.resolve()
  const frame={url:'file://'+path},event={senderFrame:frame,sender:{mainFrame:frame}}
- return{configure:c=>handlers.get('zcode-music:configure')(event,c),snapshot:()=>handlers.get('zcode-music:snapshot')(event),saved:()=>persisted}
+ return{configure:c=>handlers.get('zcode-music:configure')(event,c),snapshot:()=>handlers.get('zcode-music:snapshot')(event),saved:()=>persisted,reads}
 }
+test('first launch reads only the configured settings file and saves defaults there',async()=>{
+ const first=await boot()
+ assert.deepEqual(first.reads,['/settings/settings.json'])
+ const state=first.configure({enabled:false})
+ assert.equal(state.showCover,true);assert.equal(state.colorMode,'album')
+ assert.equal(JSON.parse(first.saved()).enabled,false)
+})
 test('color choice preserves existing album appearance and persists theme choice across restarts',async()=>{
  const first=await boot('{"enabled":false,"anyApp":true}')
  assert.equal((await first.snapshot()).colorMode,'album')

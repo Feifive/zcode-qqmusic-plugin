@@ -70,7 +70,7 @@ test('parallel player palette has its separate 137 boundary, custom priority, an
 })
 test('asynchronous cover fetches deduplicate by album, do not cross tracks, and retry failures',async()=>{
  const jobs=new Map();let requests=0,time=0
- const reader=createPaletteReader({now:()=>time,fetchImage:id=>{requests++;return new Promise((resolve,reject)=>jobs.set(id,{resolve,reject}))},decode:x=>x})
+ const reader=createPaletteReader({now:()=>time,fetchImage:id=>{requests++;return new Promise((resolve,reject)=>jobs.set(id,{resolve,reject}))},decode:x=>({pixels:x,order:'bgra'})})
  assert.equal(reader.get('A'),null);assert.equal(reader.get('A'),null);reader.get('B');await settle();assert.equal(requests,2)
  jobs.get('A').resolve(rgba([61,61,153,100]));await settle()
  assert.equal(reader.get('B'),null);assert.ok(reader.get('A').magicColors.length)
@@ -110,7 +110,7 @@ test('album mapping misses and mapping errors fall back to QQ green without cons
 })
 test('decode and empty/transparent extraction failures retain the QQ green fallback',async()=>{
  for(const decode of [()=>{throw Error('decode failed')},()=>new Uint8Array(),()=>new Uint8Array(400)]){
-  const reader=createPaletteReader({fetchImage:async()=>Buffer.from('cover'),decode})
+  const reader=createPaletteReader({fetchImage:async()=>Buffer.from('cover'),decode:()=>({pixels:decode(),order:'bgra'})})
   assert.equal(paletteForArtwork(reader.get('album')).accent,'#00F168')
   await settle()
   assert.equal(paletteForArtwork(reader.get('album')).accent,'#00F168')
@@ -121,7 +121,7 @@ test('decode and empty/transparent extraction failures retain the QQ green fallb
 test('cover thumbnails share the album cache with colors and never cross album identities',async()=>{
  const jobs=new Map();let requests=0
  const thumbs={A:'data:image/png;base64,QUFB',B:'data:image/png;base64,QkJC'}
- const reader=createPaletteReader({fetchImage:id=>{requests++;return new Promise(resolve=>jobs.set(id,resolve))},decode:id=>({pixels:rgba([61,153,61,100]),thumbnail:thumbs[id]})})
+ const reader=createPaletteReader({fetchImage:id=>{requests++;return new Promise(resolve=>jobs.set(id,resolve))},decode:id=>({order:'bgra',pixels:rgba([61,153,61,100]),thumbnail:thumbs[id]})})
  assert.equal(reader.get('A'),null);assert.equal(reader.get('A'),null);assert.equal(reader.get('B'),null)
  await settle();assert.equal(requests,2)
  jobs.get('A')('A');await settle()
@@ -132,7 +132,7 @@ test('cover thumbnails share the album cache with colors and never cross album i
 })
 test('cover cache only exports bounded inline PNG thumbnails',async()=>{
  for(const thumbnail of ['https://example.com/image.png','data:image/svg+xml;base64,QUFB','data:image/png;base64,'+'A'.repeat(65536),null]){
-  const reader=createPaletteReader({fetchImage:async()=>null,decode:()=>({pixels:rgba([61,153,61,100]),thumbnail})})
+  const reader=createPaletteReader({fetchImage:async()=>null,decode:()=>({order:'bgra',pixels:rgba([61,153,61,100]),thumbnail})})
   reader.get('album');await settle()
   assert.equal(reader.get('album').thumbnail,undefined)
   assert.ok(reader.get('album').magicColors.length)
@@ -141,7 +141,7 @@ test('cover cache only exports bounded inline PNG thumbnails',async()=>{
 
 test('original cover previews reuse the cache, stay album-scoped and reject invalid image data',async()=>{
  const image='data:image/png;base64,QUFB',jobs=new Map();let requests=0
- const reader=createPaletteReader({fetchImage:id=>{requests++;return new Promise(resolve=>jobs.set(id,resolve))},decode:preview=>({pixels:rgba([61,153,61,100]),preview})})
+ const reader=createPaletteReader({fetchImage:id=>{requests++;return new Promise(resolve=>jobs.set(id,resolve))},decode:preview=>({order:'bgra',pixels:rgba([61,153,61,100]),preview})})
  assert.equal(reader.preview('A'),null);assert.equal(requests,0)
  reader.get('A');reader.get('B');await settle()
  jobs.get('A')({image,width:300,height:300});await settle()

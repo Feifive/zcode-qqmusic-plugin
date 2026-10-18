@@ -192,7 +192,7 @@ static int read_media(int argc, const char *argv[]) {
 }
 
 #ifdef ZCODE_MUSIC_LIBRARY
-// macOS 15.4+ gates the legacy MediaRemote read functions by the caller's
+// macOS 15.4+ gates MediaRemote read functions by the caller's
 // signing identity. Load this narrow adapter with the system Perl DynaLoader,
 // following https://github.com/ungive/mediaremote-adapter (no SIP changes).
 // The exported function never returns: the result callback exits the process.

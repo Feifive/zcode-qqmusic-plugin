@@ -83,7 +83,7 @@ test('QQ matching rejects unrelated results even when artists match', async () =
 test('IPC rejects webviews and subframes before reading playback or running commands', async () => {
   const handlers = new Map()
   const path = '/official/app.asar/out/renderer/index.html'
-  const app = { whenReady: () => Promise.resolve(), getAppPath: () => '/official/app.asar', getPath: () => '/tmp/zcode-music-test-settings' }
+  const app = { whenReady: () => Promise.resolve() }
   const require = name => {
     if (name === 'electron') return { app, ipcMain: { handle: (name, handler) => handlers.set(name, handler) } }
     if (name === 'node:child_process') return { execFile: () => { throw Error('Unexpected helper execution') } }
@@ -92,7 +92,7 @@ test('IPC rejects webviews and subframes before reading playback or running comm
     if (name === 'node:path') return { join: (...parts) => parts.join('/'), resolve: () => path }
     throw Error(name)
   }
-  vm.runInNewContext(readFileSync(new URL('../plugin/main.cjs', import.meta.url), 'utf8')+'\nmodule.exports()', { module:{exports:null}, require, __dirname: '/official/app.asar/out/main/zcode-music', console, Date, URL })
+  vm.runInNewContext(readFileSync(new URL('../plugin/main.cjs', import.meta.url), 'utf8')+'\nmodule.exports({runtimeDir:"/runtime",rendererPath:"/official/app.asar/out/renderer/index.html",settingsDir:"/settings"})', { module:{exports:null}, require, __dirname: '/runtime/plugin', console, Date, URL })
   await Promise.resolve()
   const frame = { url: 'file://' + path }
   const trusted = { senderFrame: frame, sender: { mainFrame: frame } }
