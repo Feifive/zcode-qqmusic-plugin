@@ -1,0 +1,116 @@
+module.exports = function start(runtime = {}) {
+const { app, ipcMain, nativeImage } = require('electron')
+const { execFile } = require('node:child_process')
+const { pathToFileURL, fileURLToPath } = require('node:url')
+const { join, resolve } = require('node:path')
+const { readFileSync, writeFileSync, renameSync, mkdirSync } = require('node:fs')
+
+const rendererPath = runtime.rendererPath || resolve(__dirname, '../../renderer/index.html')
+const nativeDir = runtime.runtimeDir ? join(runtime.runtimeDir, 'native') : join(app.getAppPath() + '.unpacked', 'out/main/zcode-music')
+const helper = join(nativeDir, 'now-playing.dylib')
+const reader = join(nativeDir, 'reader.pl')
+const options = { apps: ['qqmusic'], anyApp: false, pollMs: 2000 }
+let enabled = true
+let colorMode = 'album'
+let settingsFile
+let latest = null
+let sampledAt = 0
+let inflight
+let reporter
+let previousMediaSample = null
+let mediaUtils
+let paletteReader
+
+function trusted(event) {
+  try {
+    return event.senderFrame === event.sender.mainFrame &&
+      fileURLToPath(new URL(event.senderFrame.url)) === rendererPath
+  } catch { return false }
+}
+function run(args = []) {
+  return new Promise(resolve => {
+    execFile('/usr/bin/perl', [reader, helper], {
+      timeout: 4500, maxBuffer: 64 * 1024,
+      env: { ...process.env, ZCODE_MUSIC_ACTION: args[0] || 'snapshot', ZCODE_MUSIC_PLAYER: args[1] || 'com.tencent.QQMusicMac', ZCODE_MUSIC_POSITION: args[2] || '0' },
+    }, async (error, stdout) => {
+      try {
+        let result = JSON.parse(stdout)
+        if ((args[0] || 'snapshot') === 'snapshot') {
+          mediaUtils ??= import(pathToFileURL(join(__dirname, 'lib/nowplaying.js')).href)
+          result = (await mediaUtils).normalizeMacSample(result, previousMediaSample)
+          previousMediaSample = result
+        }
+        resolve(result)
+      }
+      catch { resolve({ error: error?.code === 'ENOENT' ? 'helper-not-found' : 'mediaremote-unavailable', sessions: [], at: Date.now() }) }
+    })
+  })
+}
+async function snapshot() {
+  if (!enabled) return { state: 'disabled', track: null, lyric: null, enabled, anyApp: options.anyApp, colorMode }
+  if (latest && Date.now() - sampledAt < 1400) return latest
+  if (inflight) return inflight
+  inflight = (async () => {
+    reporter ??= import(pathToFileURL(join(__dirname, 'lib/playback.js')).href)
+      .then(({ createPlaybackReporter }) => createPlaybackReporter({ options }))
+    const sample = await run(['snapshot'])
+    const result = sample.error ? { state: 'unavailable', track: null, lyric: null, error: sample.error } : await (await reporter).report(sample)
+    if (colorMode === 'album') paletteReader ??= import(pathToFileURL(join(__dirname, 'lib/artwork.js')).href).then(({createPaletteReader}) => createPaletteReader({
+      decode(bytes) {
+        const image = nativeImage.createFromBuffer(bytes)
+        if (image.isEmpty()) throw Error('Invalid cover image')
+        return image.resize({width:10,height:10,quality:'good'}).toBitmap()
+      },
+    }))
+    latest = { ...result, artworkColors: colorMode === 'album' ? (await paletteReader).get(result.track?.albumMid) : null, enabled, anyApp: options.anyApp, colorMode }
+    sampledAt = Date.now()
+    return latest
+  })().finally(() => { inflight = null })
+  return inflight
+}
+app.whenReady().then(() => {
+  settingsFile = runtime.settingsDir ? join(runtime.settingsDir, 'settings.json') : join(app.getPath('userData'), 'zcode-music-plugin.json')
+  try {
+    let text
+    try { text = readFileSync(settingsFile, 'utf8') }
+    catch { text = readFileSync(join(app.getPath('userData'), 'zcode-music-plugin.json'), 'utf8') }
+    const saved = JSON.parse(text)
+    enabled = saved.enabled !== false
+    options.anyApp = saved.anyApp === true
+    colorMode = saved.colorMode === 'theme' ? 'theme' : 'album'
+  } catch { /* first launch */ }
+  ipcMain.handle('zcode-music:snapshot', event => {
+    if (!trusted(event)) throw new Error('Untrusted music plugin sender')
+    return snapshot()
+  })
+  ipcMain.handle('zcode-music:configure', (event, config) => {
+    if (!trusted(event)) throw new Error('Untrusted music plugin sender')
+    if (typeof config?.enabled === 'boolean') enabled = config.enabled
+    if (typeof config?.anyApp === 'boolean') options.anyApp = config.anyApp
+    if (['theme', 'album'].includes(config?.colorMode)) colorMode = config.colorMode
+    latest = null
+    mkdirSync(runtime.settingsDir || app.getPath('userData'), { recursive: true })
+    writeFileSync(settingsFile + '.tmp', JSON.stringify({ enabled, anyApp: options.anyApp, colorMode }))
+    renameSync(settingsFile + '.tmp', settingsFile)
+    return { enabled, anyApp: options.anyApp, colorMode }
+  })
+  ipcMain.handle('zcode-music:control', async (event, payload) => {
+    if (!trusted(event)) throw new Error('Untrusted music plugin sender')
+    if (!enabled) return { ok: false, error: 'disabled' }
+    if (!['toggle', 'next', 'prev', 'seek'].includes(payload?.action)) return { ok: false, error: 'bad-action' }
+    if (payload.action === 'seek') return { ok: false, error: 'seek-unavailable' }
+    const { pickSession } = await import(pathToFileURL(join(__dirname, 'lib/nowplaying.js')).href)
+    const sample = await run(['snapshot'])
+    const session = pickSession(sample.sessions, options)
+    if (!session) return { ok: false, error: 'no-player' }
+    const action = payload.action === 'toggle' ? (session.status === 'playing' ? 'pause' : 'play') : payload.action
+    const result = await run([action, session.app])
+    // Read the confirmed post-command state now, so the next UI refresh does
+    // not wait for the normal poll and can preserve the paused playhead.
+    if (result.ok) await run(['snapshot'])
+    latest = null
+    return result
+  })
+}).catch(error => console.error('[zcode-music]', error))
+
+}

@@ -1,0 +1,7 @@
+dist/
+backup/
+artifacts/
+.DS_Store
+
+.release-private-key.pem
+*.log

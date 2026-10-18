@@ -1,0 +1,22 @@
+{
+  "name": "zcode-music-plugin",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "QQ Music lyric dock for the official ZCode macOS app",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "pack:source": "node scripts/package.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:live": "node test/live-playback.mjs",
+    "test:control": "node test/live-control.mjs",
+    "install:app": "node scripts/install.mjs",
+    "restore": "node scripts/install.mjs --restore",
+    "release": "node scripts/release.mjs",
+    "pack:installer": "node scripts/installer.mjs",
+    "update": "node scripts/manage.mjs update",
+    "status": "node scripts/manage.mjs status",
+    "rollback": "node scripts/manage.mjs rollback",
+    "publish:release": "node scripts/publish.mjs"
+  }
+}

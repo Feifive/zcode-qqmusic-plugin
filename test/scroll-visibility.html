@@ -1,0 +1,42 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>聊天底部音乐条检查</title>
+<style>
+body{font:14px system-ui;background:#fafafa;color:#333;margin:32px}button{padding:8px;margin:4px;cursor:pointer}#root{display:flex;gap:20px;max-width:900px}.timeline{height:390px;overflow:auto;border:1px solid #ddd;flex:1;min-width:0}.history{height:900px;background:repeating-linear-gradient(#fff 0px,#fff 79px,#ddd 80px);padding:20px}.composer-dock{position:sticky;bottom:0;background:#fafafae8;padding:12px}.chat-composer-input-surface{padding:20px;border:1px solid #ccc;border-radius:12px;background:white}.nested{overflow:auto;height:80px;width:200px;background:#eee}#result{display:block;white-space:pre-wrap;margin:20px 0}
+</style>
+<h1>聊天底部音乐条检查</h1><p>模拟 ZCode 原生时间线状态，音乐与歌词均为本地演示。</p>
+<button id="run">运行回归检查</button><button id="away">上翻历史</button><button id="bottom">回到底部</button>
+<output id="result">等待运行</output><div id="root"></div>
+<script>
+window.zcodeMusic={snapshot:async()=>({state:'paused',sampledAt:Date.now(),enabled:true,track:{title:'底部显示检查',artist:'本地演示',playing:false,positionMs:2000,durationMs:8000},lyric:{offset:0,lines:[{start:0,duration:8000,text:'回到聊天最底部，音乐条自动显示',words:[]}]}}),configure:async()=>({}),control:async()=>({ok:false})};
+const root=document.querySelector('#root'),out=document.querySelector('#result');
+function createTimeline(following=true){
+ const el=document.createElement('section');el.className='timeline';el.dataset.v4TimelineScroll='true';el.dataset.following=String(following);
+ el.innerHTML='<div class="history">聊天历史<div class="nested"><div style="height:400px">代码块滚动区域</div></div></div><div class="composer-dock" data-v4-composer-dock="true"><div class="chat-composer-input-surface">输入消息</div></div>';
+ el.addEventListener('scroll',()=>{el.dataset.following=String(el.scrollHeight-el.clientHeight-el.scrollTop<=48)});
+ return el;
+}
+let active=createTimeline();root.append(active);active.scrollTop=active.scrollHeight;
+const settle=()=>new Promise(resolve=>setTimeout(resolve,100));
+const getHost=()=>document.querySelector('#zcode-music-plugin');
+const visible=()=>!!getHost()&&getComputedStyle(getHost()).display!=='none'&&getHost().getBoundingClientRect().height>0;
+function bottom(){active.scrollTop=active.scrollHeight;active.dispatchEvent(new Event('scroll'));}
+function away(){active.scrollTop=100;active.dispatchEvent(new Event('scroll'));}
+document.querySelector('#away').onclick=away;document.querySelector('#bottom').onclick=bottom;
+document.querySelector('#run').onclick=async()=>{
+ const checks=[];const check=(name,ok)=>{checks.push({name,pass:!!ok});out.textContent=JSON.stringify(checks,null,2);if(!ok)throw Error(name)};
+ try{
+  bottom();await settle();check('最底部显示歌词条',visible());
+  getHost().shadowRoot.querySelector('.track').click();await settle();check('设置面板可打开',!getHost().shadowRoot.querySelector('.panel').hidden);
+  away();await settle();check('上翻整条隐藏且不占高度',!visible()&&getHost().getBoundingClientRect().height===0);check('上翻关闭设置面板',getHost().shadowRoot.querySelector('.panel').hidden);
+  await settle();check('隐藏后布局稳定，不反复显示',!visible());
+  active.querySelector('.nested').scrollTop=200;await settle();check('嵌套代码滚动不改变音乐条状态',!visible());
+  bottom();await settle();check('返回底部恢复',visible());
+  const other=createTimeline(false);other.querySelector('.composer-dock').remove();root.prepend(other);await settle();check('其他时间线的滚动状态不影响当前输入框',visible());
+  const old=active;active=createTimeline(false);old.replaceWith(active);await settle();check('切换到历史位置的会话时保持隐藏',!visible());
+  old.dataset.following='true';await settle();check('旧会话状态变更不影响当前会话',!visible());
+  bottom();await settle();check('新会话回到底部恢复',visible());
+  root.replaceChildren();const home=document.createElement('div');home.innerHTML='<div class="chat-composer-input-surface">新聊天</div>';root.append(home);await settle();check('无时间线的新聊天正常显示',visible());
+  root.replaceChildren(active);bottom();await settle();check('重新挂载恢复监听',visible());
+  out.textContent='PASS '+checks.length+' checks\n'+JSON.stringify(checks,null,2);
+ }catch(error){out.textContent='FAIL '+error.message+'\n'+JSON.stringify(checks,null,2)}
+};
+</script><script src="../plugin/renderer.js"></script></html>

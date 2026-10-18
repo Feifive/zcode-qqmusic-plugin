@@ -1,0 +1,31 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>逐词高亮回归检查</title>
+<style>body{font:14px Arial,sans-serif;background:#fafafa;color:#333;padding:48px;--color-interaction-ask-foreground:#1267db;--color-popover:#fff;--color-foreground:#333;--color-foreground-subtle:#999}.chat-composer-region{width:min(100%,720px);margin-top:120px}.chat-composer-input-surface{border:1px solid #ddd;border-radius:16px;padding:24px;background:white}button.fixture{padding:8px 12px;margin:4px;border:1px solid #ccc;border-radius:6px;background:white;cursor:pointer}#result{margin:24px 0;font:13px ui-monospace,monospace;white-space:pre-wrap}</style>
+<h1>逐词高亮回归检查</h1><p>固定时间、真实字体测量，检查英文宽窄字母、重叠时间和长句跟随。</p>
+<button class="fixture" id="fast">重叠词 · 450ms</button><button class="fixture" id="long">长句跟随 · 1050ms</button><button class="fixture" id="early">回到开头 · 50ms</button><button class="fixture" id="lrc">无逐词歌词</button>
+<output id="result">等待歌词条加载…</output><div id="root"><div class="chat-composer-region"><div class="chat-composer-input-surface">歌词条检查用输入框</div></div></div>
+<script>
+const tokens=['WWW ','iiiii ','WWWW ','ill ','WWW ','iiiii ','WWWW ','ill ','WWW ','iiiii ','WWWW ','ill '];
+let fixtureTime=450,untimed=false;
+const words=tokens.map((text,i)=>({text,start:i*100,duration:400}));
+const text=tokens.join('').trim();
+window.zcodeMusic={snapshot:async()=>({state:'paused',sampledAt:Date.now(),enabled:true,track:{title:'宽窄字母同步测试',artist:'本地演示',playing:false,positionMs:fixtureTime,durationMs:2000},lyric:{offset:0,lines:[{start:0,duration:2000,text,words:untimed?[]:words}]}}),configure:async()=>({}),control:async()=>({ok:false})};
+function choose(time,lrc=false){fixtureTime=time;untimed=lrc;}
+document.querySelector('#fast').onclick=()=>choose(450);
+document.querySelector('#long').onclick=()=>choose(1050);
+document.querySelector('#early').onclick=()=>choose(50);
+document.querySelector('#lrc').onclick=()=>choose(450,true);
+setInterval(()=>{
+ const shadow=document.querySelector('#zcode-music-plugin')?.shadowRoot;
+ const line=shadow?.querySelector('.lyric span');if(!line?.textContent)return;
+ if(untimed){document.querySelector('#result').textContent=JSON.stringify({untimed:line.classList.contains('untimed'),background:getComputedStyle(line).backgroundImage},null,2);return;}
+ const active=Math.min(words.length-1,Math.floor(fixtureTime/100));
+ const from=tokens.slice(0,active).join('').length,to=from+tokens[active].length;
+ const range=document.createRange();range.setStart(line.firstChild,from);range.setEnd(line.firstChild,Math.min(to,text.length));
+ const rect=range.getBoundingClientRect(),bounds=line.getBoundingClientRect();
+ const expected=rect.left-bounds.left+rect.width*Math.min(1,(fixtureTime-words[active].start)/words[active].duration);
+ const actual=parseFloat(line.style.getPropertyValue('--sweep-x'));
+ const viewport=shadow.querySelector('.lyric').getBoundingClientRect();
+ const frontier=bounds.left+actual;
+ document.querySelector('#result').textContent=JSON.stringify({time:fixtureTime,activeWord:tokens[active].trim(),expectedPx:expected,actualPx:actual,errorPx:Math.abs(actual-expected),wordVisible:frontier>=viewport.left&&frontier<=viewport.right,marquee:getComputedStyle(line).animationName,pass:Math.abs(actual-expected)<.5},null,2);
+},100);
+</script><script src="../plugin/renderer.js"></script></html>

@@ -1,0 +1,28 @@
+name: Test and publish installer
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: zcode-music-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'Feifive/zcode-qqmusic-plugin'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: npm test
+      - run: npm run pack:installer
+      - name: Publish signed plugin and universal installer
+        run: node scripts/publish.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
