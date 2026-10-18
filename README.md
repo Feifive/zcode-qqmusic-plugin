@@ -1,6 +1,6 @@
 # ZCode QQ 音乐歌词插件
 
-在 ZCode 聊天输入框上方显示 QQ 音乐同步歌词。当前 **0.3.0**，适配官方 **ZCode macOS 3.15.3**。
+在 ZCode 聊天输入框上方显示 QQ 音乐同步歌词。当前 **0.3.1**，适配官方 **ZCode macOS 3.15.3**。
 
 [下载安装器](https://github.com/Feifive/zcode-qqmusic-plugin/releases/latest) · [安装与迁移说明](INSTALL-OTHER-MAC.md)
 
@@ -20,6 +20,7 @@ ZCode 官方升级可能覆盖加载器；需要使用适配该官方版本的�
 - QRC 按真实逐字时间和字符像素宽度推进，高速英文、重叠词和长句滚动使用同一播放时间轴。只有 LRC 时显示逐行歌词。
 - 只在对话跟随最底部时显示歌词条，避免与聊天内容重叠。
 - 设置可选跟随 ZCode 主题色或专辑色，歌名、数字进度和控制高亮跟随同一配色；进度条未播放部分为灰色。
+- 专辑色模式在封面等待、缺失、下载/解码/取色失败或映射失败时，统一回退 QQ 绿 `#00F168`，失败数据不再进入灰度规则。真实灰度封面仍按有效配色映射；主题色模式始终跟随 ZCode。
 - 专辑色严格按 [QQ magicColors 规格](research/qqmusic-magic-color-spec.md) 的 10×10 封面提取、8 个色相桶、HSB 柔和化及亮/暗各 26 条映射规则实现，无额外对比度重调。包含文档中的手工映射表。
 - 拆分 QQ 搜索结果的分号歌手字段，用完整版本标题、时长和专辑区分原版、Live、纯音乐和 Remix。回归案例 K/DA《POP/STARS》不会误选 50 秒 Remix。
 
@@ -30,7 +31,7 @@ ZCode.app 中的固定加载器（首次安装或兼容性修复）
                 ↓ 验证签名与文件哈希
 ~/Library/Application Support/ZCode Music/
   active.json                 当前版本 / 上一版本，原子切换
-  versions/0.3.0/             主进程、界面、媒体库与签名清单
+  versions/0.3.1/             主进程、界面、媒体库与签名清单
   settings.json              偏好设置，兼容读取旧版设置
   backups/<官方版本>-<哈希>/   原始官方 ZCode.app
   installation.json          加载器安装记录

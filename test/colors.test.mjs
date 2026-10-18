@@ -65,8 +65,8 @@ test('parallel player palette has its separate 137 boundary, custom priority, an
  assert.deepEqual(playerColorsWithMagicColor(null,'A0A0A6'),colorRules.multiColors.groups[25].map(c=>'#'+c))
  assert.equal(paletteForArtwork({magicColors:[hsv(0)]},true).accent,'#F3616F')
  assert.equal(paletteForArtwork({magicColors:[hsv(0)]},false).accent,'#9A232E')
- assert.equal(paletteForArtwork({magicColors:[],pureColor:null}).accent,'#8F8F94')
- assert.equal(paletteForArtwork(null),null)
+ assert.equal(paletteForArtwork({magicColors:[],pureColor:null}).accent,'#00F168')
+ assert.equal(paletteForArtwork(null).accent,'#00F168')
  assert.deepEqual(hsbToRGB(hsv(120,1,1)),[0,255,0])
 })
 test('asynchronous cover fetches deduplicate by album, do not cross tracks, and retry failures',async()=>{
@@ -85,4 +85,36 @@ test('artwork reads only a bounded image response at the fixed QQ Music CDN',asy
  await assert.rejects(fetchArtwork('abc',{fetcher:async()=>response('text/html',2,'no')}),/type/)
  await assert.rejects(fetchArtwork('abc',{fetcher:async()=>response('image/jpeg',3_000_000,'no')}),/large/)
  assert.equal((await fetchArtwork('abc',{fetcher:async()=>response('image/jpeg',2,'ok')})).toString(),'ok')
+})
+
+test('album color uses QQ green for pending, missing, failed and malformed artwork in both skins',()=>{
+ for(const light of [true,false])for(const artwork of [null,undefined,{}, {magicColors:[],pureColor:null}, {magicColors:[{h:NaN,s:.6,b:.6}],pureColor:{h:800,s:0,b:0}}, {magicColors:{find:'invalid'}}, {pureColor:{h:0,s:-1,b:1}}]){
+  const palette=paletteForArtwork(artwork,light)
+  assert.equal(palette.accent,'#00F168');assert.equal(palette.base,'#00F168');assert.deepEqual(palette.player,Array(5).fill('#00F168'))
+ }
+ // A successfully decoded grayscale cover remains a real color, not a failure.
+ assert.equal(paletteForArtwork({magicColors:[],pureColor:hsv(0,0,1)},true).accent,'#8F8F94')
+ assert.equal(paletteForArtwork({magicColors:[],pureColor:hsv(0,0,0)},false).accent,'#666666')
+})
+test('album mapping misses and mapping errors fall back to QQ green without consulting grayscale rules',()=>{
+ for(const light of [true,false]){
+  const name=light?'light':'dark',rules=colorRules.mapping[name]
+  try{
+   colorRules.mapping[name]=[]
+   assert.equal(paletteForArtwork({magicColors:[hsv(30)]},light).accent,'#00F168')
+   colorRules.mapping[name]=[{h:[0,360],value:['#123456']}]
+   assert.equal(paletteForArtwork({magicColors:[hsv(30)]},light).accent,'#00F168')
+   colorRules.mapping[name]=null
+   assert.equal(paletteForArtwork({magicColors:[hsv(30)]},light).accent,'#00F168')
+  }finally{colorRules.mapping[name]=rules}
+ }
+})
+test('decode and empty/transparent extraction failures retain the QQ green fallback',async()=>{
+ for(const decode of [()=>{throw Error('decode failed')},()=>new Uint8Array(),()=>new Uint8Array(400)]){
+  const reader=createPaletteReader({fetchImage:async()=>Buffer.from('cover'),decode})
+  assert.equal(paletteForArtwork(reader.get('album')).accent,'#00F168')
+  await settle()
+  assert.equal(paletteForArtwork(reader.get('album')).accent,'#00F168')
+ }
+ for(const pixels of [null,[],new Uint8Array(),new Uint8Array(3),new Uint8Array(400)])assert.throws(()=>extractMagicColors(pixels),/pixels/)
 })

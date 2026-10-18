@@ -1,5 +1,6 @@
 import { colorRules } from './color-rules.js'
 export { colorRules }
+export const QQ_GREEN = '#00F168'
 export function rgbToHSB(r, g, b) {
   r /= 255; g /= 255; b /= 255
   const max = Math.max(r,g,b), min = Math.min(r,g,b), delta = max-min
@@ -38,6 +39,7 @@ export function hueBucket(hue) {
 // Input must be the 10×10 thumbnail. Keep HSB precision across IPC and mapping;
 // rounding the magic color to 8-bit hex first can select an adjacent rule.
 export function extractMagicColors(pixels, { order='bgra', count=3, premultiplied=true }={}) {
+  if (!ArrayBuffer.isView(pixels) || !Number.isInteger(pixels.length) || pixels.length < 4 || pixels.length % 4) throw Error('Invalid artwork pixels')
   const buckets=Array.from({length:8},(_,index)=>({index,colors:[]}))
   let light=0,dark=0
   for(let i=0;i+3<pixels.length;i+=4){
@@ -50,6 +52,7 @@ export function extractMagicColors(pixels, { order='bgra', count=3, premultiplie
       if(relativeLuminance(rgb)>=.5)light++;else dark++
     }else buckets[hueBucket(hsb.h)].colors.push(hsb)
   }
+  if (!light && !dark && !buckets.some(bucket=>bucket.colors.length)) throw Error('Artwork has no visible pixels')
   const ranked=buckets.sort((a,b)=>b.colors.length-a.colors.length||a.index-b.index)
   const maxBucket=ranked[0].colors.length
   const colors=[]
@@ -92,8 +95,13 @@ export function playerColorsWithMagicColor(color, customHex='') {
   return Array(5).fill(fallback)
 }
 export function paletteForArtwork(artwork, light=true) {
-  if(!artwork)return null
-  const primary=artwork.magicColors?.find(validColor)||(validColor(artwork.pureColor)?artwork.pureColor:null)
-  const mapped=mapMagicColor(primary,{light})
-  return mapped?{base:mapped[0],accent:mapped[1],surface:mapped[2],player:playerColorsWithMagicColor(primary)}:null
+  const fallback = () => ({base:QQ_GREEN,accent:QQ_GREEN,surface:light?'#FFFFFF':'#1E1E1F',player:Array(5).fill(QQ_GREEN)})
+  try {
+    const primary=(Array.isArray(artwork?.magicColors)?artwork.magicColors.find(validColor):null)||(validColor(artwork?.pureColor)?artwork.pureColor:null)
+    // Missing/failed artwork must never enter the nil-to-black grayscale rule.
+    if(!primary)return fallback()
+    const mapped=mapMagicColor(primary,{light})
+    if(!Array.isArray(mapped)||mapped.length<3||!mapped.slice(0,3).every(value=>/^#[0-9a-f]{6}$/i.test(value)))return fallback()
+    return {base:mapped[0],accent:mapped[1],surface:mapped[2],player:playerColorsWithMagicColor(primary)}
+  } catch { return fallback() }
 }
