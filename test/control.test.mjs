@@ -19,7 +19,7 @@ async function boot(queue,saved={enabled:true,colorMode:'theme',showCover:false}
  }
  vm.runInNewContext(readFileSync(join(directory,'main.cjs'),'utf8')+'\nmodule.exports({runtimeDir:"/runtime",rendererPath:"/official/renderer/index.html",settingsDir:"/settings"})', {module:{exports:null},require,__dirname:directory,console,Date,URL,process:{env:{}}},{importModuleDynamically:vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER})
  await Promise.resolve()
- return{calls,event,control:(payload,source=event)=>handlers.get('zcode-music:control')(source,payload),snapshot:()=>handlers.get('zcode-music:snapshot')(event)}
+ return{calls,event,configure:(payload,source=event)=>handlers.get('zcode-music:configure')(source,payload),control:(payload,source=event)=>handlers.get('zcode-music:control')(source,payload),snapshot:()=>handlers.get('zcode-music:snapshot')(event)}
 }
 test('seek IPC rejects malformed positions, disabled plugins and untrusted frames before helpers run',async()=>{
  const app=await boot([])
@@ -62,4 +62,21 @@ test('seek IPC does not resume a changed track and reports a rejected play comma
  const rejected=await boot([sample(),{ok:true,verified:true},sample({position:5000}),{ok:false,error:'command-not-applied'}])
  assert.equal((await rejected.control({action:'seek',positionMs:5000})).error,'playback-not-started')
  assert.deepEqual(rejected.calls.map(c=>c.ZCODE_MUSIC_ACTION),['snapshot','seek','snapshot','play'])
+})
+
+
+test('favorite IPC validates sender, payload and current song before accessing the account',async()=>{
+ const previous=globalThis.fetch
+ globalThis.fetch=async url=>new URL(url).pathname.includes('search_')
+  ? {ok:true,text:async()=>JSON.stringify({data:{song:{list:[{songname:'seek test',songmid:'actual-mid',songid:123,singer:[{name:'fixture'}]}]}}})}
+  : {ok:true,text:async()=>'<content><![CDATA[[0,1000]test(0,1000)]]></content>'}
+ try {
+  const app=await boot([sample()])
+  assert.throws(()=>app.configure({favorite:{action:'set',songmid:'actual-mid',liked:true}},{senderFrame:{url:'https://example.com'},sender:app.event.sender}),/Untrusted/)
+  for(const favorite of [null,{action:'toggle',songmid:'actual-mid'},{action:'set',songmid:'actual-mid',liked:'yes'}])await assert.rejects(app.configure({favorite}),/无效的收藏/)
+  assert.equal(app.calls.length,0)
+  await assert.rejects(app.configure({favorite:{action:'set',songmid:'old-mid',liked:true}}),/当前歌曲已变化/)
+  assert.equal((await app.configure({favorite:{action:'status',songmid:'actual-mid'},enabled:false})).status,'logged-out')
+  assert.equal((await app.snapshot()).enabled,true)
+ }finally{globalThis.fetch=previous}
 })

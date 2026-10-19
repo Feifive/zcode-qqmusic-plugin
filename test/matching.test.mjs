@@ -44,3 +44,19 @@ test('reporter song cache keeps the original and Remix identities separate',asyn
   assert.ok(a.lyric.lines.length);assert.ok(b.lyric.lines.length);assert.equal(searches,2)
  }finally{globalThis.fetch=previous}
 })
+
+test('favorites require an accurate QQ recording with safe ID, matching edition, artist, album and duration', async () => {
+ const previous=globalThis.fetch
+ globalThis.fetch=async url=>new URL(url).pathname.includes('search_')
+  ? {ok:true,text:async()=>JSON.stringify({data:{song:{list:[original]}}})}
+  : {ok:true,text:async()=>'<content><![CDATA[[0,1000]test(0,1000)]]></content>'}
+ try {
+  const reporter=createPlaybackReporter({options:{apps:['qqmusic'],anyApp:true,pollMs:2000},refrainReader:{get:()=>null}})
+  const sample=overrides=>({at:Date.now(),sessions:[{app:'com.tencent.QQMusicMac',title:'POP/STARS',artist:'K/DA',duration:191000,album:'POP/STARS',status:'paused',...overrides}]})
+  const correct=await reporter.report(sample({}))
+  assert.equal(correct.track.favoriteEligible,true); assert.equal(correct.track.songid,original.songid); assert.equal(correct.track.songtype,0)
+  for(const changes of [{title:'POP/STARS (Live)'},{artist:'Other artist'},{album:'Another recording'},{duration:50000},{app:'com.apple.Music'},{artist:''}]) {
+   assert.equal((await reporter.report(sample(changes))).track.favoriteEligible,false,JSON.stringify(changes))
+  }
+ } finally {globalThis.fetch=previous}
+})

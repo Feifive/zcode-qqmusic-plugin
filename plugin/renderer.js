@@ -9,6 +9,8 @@
   const { inlinePNG, coverPreviewLayout, createCoverPreview } = await import(new URL('./lib/cover.js', scriptURL).href)
   const { seekRatio, createSeekInteraction } = await import(new URL('./lib/seek.js', scriptURL).href)
   const { refrainPosition } = await import(new URL('./lib/refrain.js', scriptURL).href)
+  const { accountMarkup, createAccountUI } = await import(new URL('./lib/qq-account-ui.js', scriptURL).href)
+  const { createFavoriteState } = await import(new URL('./lib/favorite-ui.js', scriptURL).href)
   const host = document.createElement('div')
   host.id = 'zcode-music-plugin'
   host.hidden = true
@@ -18,6 +20,7 @@
       <div class="track"><span class="cover" role="img" aria-label="专辑封面" tabindex="0"><svg viewBox="0 0 20 20" focusable="false"><circle cx="10" cy="10" r="6.5"/><circle cx="10" cy="10" r="1.5"/></svg><img alt="" width="20" height="20" draggable="false" hidden></span><span class="name"></span><span class="meter"><i></i><i></i><i></i></span></div>
       <div class="lyric"><span></span></div>
       <div class="transport"><span class="time"></span><div class="controls">
+        <button class="favorite" aria-label="加入我喜欢" title="加入我喜欢" aria-pressed="mixed" disabled><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg></button>
         <button data-action="prev" aria-label="上一首" title="上一首"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 5v14M19 5 9 12l10 7V5Z"/></svg></button>
         <button data-action="toggle" aria-label="播放" title="播放"><svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m8 5 11 7-11 7V5Z"/></svg><svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5v14M15 5v14"/></svg></button>
         <button data-action="next" aria-label="下一首" title="下一首"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 5v14M5 5l10 7-10 7V5Z"/></svg></button>
@@ -29,19 +32,41 @@
     <section class="panel" hidden aria-label="QQ 音乐歌词设置">
       <header><span>♪ QQ 音乐歌词</span><button class="close" aria-label="关闭设置">×</button></header>
       <p class="status">正在连接播放器…</p>
+      <p class="favorite-feedback" role="status" hidden></p>
       <label><span>显示同步歌词</span><input class="enabled" type="checkbox" checked></label>
       <label><span>显示专辑封面</span><input class="show-cover" type="checkbox" checked></label>
       <label><span>也跟随其他播放器</span><input class="any-app" type="checkbox"></label>
       <label><span>配色来源</span><select class="color-mode" aria-label="配色来源"><option value="theme">跟随 ZCode 主题色</option><option value="album" selected>跟随专辑色</option></select></label>
       <button class="demo">预览歌词条</button>
+      ${accountMarkup}
       <div class="updates" hidden><div class="update-heading"><span class="version"></span><button class="check-update">检查更新</button></div><p class="update-status" role="status"></p><div class="update-actions"><button class="install-update" hidden>更新并重启</button><button class="restart-update" hidden>重启生效</button><button class="rollback-update" hidden>回退并重启</button></div></div>
       <p class="hint">在 QQ 音乐播放歌曲，歌词将自动出现。仅跟随系统当前播放的媒体会话。</p>
     </section>`
   const $ = s => shadow.querySelector(s)
+  const accountUI = createAccountUI({ root: shadow, api, onAccountChange: () => { favorites.invalidate(); favorites.sync(data, demo) } })
   const dock = $('.dock'), viewport = $('.lyric'), line = $('.lyric span'), status = $('.status')
   let data = { state: 'starting' }, demo = false, disposed = false, timer, surface, lineKey = '', lastTrack = ''
   let busy = false, configuring = 0
   let refreshTicket = 0, pointerId = null
+  const favorites = createFavoriteState({
+    request: favorite => api.configure({ favorite }),
+    onChange: paintFavorite,
+    onNotice: message => { $('.favorite-feedback').textContent = message; $('.favorite-feedback').hidden = false; togglePanel(true) },
+  })
+  let favoritePaintKey = ''
+  function paintFavorite() {
+    const state = favorites.view(), button = $('.favorite')
+    const disabled = state.disabled || busy || seek.busy || seek.dragging
+    const key = `${state.liked}:${disabled}:${state.label}:${state.busy}`
+    if (key === favoritePaintKey) return
+    favoritePaintKey = key
+    button.classList.toggle('liked', state.liked === true)
+    button.disabled = disabled
+    button.title = state.label; button.setAttribute('aria-label', state.label)
+    button.setAttribute('aria-pressed', state.liked === null ? 'mixed' : String(state.liked))
+    button.setAttribute('aria-busy', String(state.busy))
+  }
+  $('.favorite').onclick = () => { $('.favorite-feedback').hidden = true; void favorites.click() }
   let geometryDirty = true, measuredWords = [], textWidth = 0, viewportWidth = 0
   $('link').addEventListener('load', () => { geometryDirty = true })
   document.fonts?.ready.then(() => { geometryDirty = true })
@@ -191,10 +216,14 @@
   }
   function togglePanel(open = $('.panel').hidden) {
     hideCoverPreview()
+    if (open) fitPanel()
     $('.panel').hidden = !open
     $('.launcher').setAttribute('aria-expanded', String(open))
-    if (open) updateStatus()
+    if (open) { updateStatus(); accountUI.open() }
+    else accountUI.close()
   }
+  function fitPanel() { host.style.setProperty('--music-panel-height', `${Math.max(120, host.getBoundingClientRect().top - 16)}px`) }
+  window.addEventListener('resize', fitPanel)
   let updateBusy = false
   async function updateStatus(action = 'status') {
     if (!api.update || updateBusy) return
@@ -251,6 +280,7 @@
     $('.demo').textContent = demo ? '退出预览' : '预览歌词条'
     status.textContent = demo ? '正在预览 · 演示内容' : messages[data.state] || '已连接播放器'
     lineKey = ''
+    favorites.sync(data, demo)
     paint()
   }
   shadow.querySelectorAll('[data-action]').forEach(button => {
@@ -293,6 +323,7 @@
     surface = next
     if (host.parentNode !== next.parentNode || host.nextSibling !== next) next.before(host)
     host.style.width = `${next.getBoundingClientRect().width}px`
+    if (!$('.panel').hidden) fitPanel()
     followTimeline(next.closest('[data-v4-timeline-scroll="true"]'))
   }
   async function refresh() {
@@ -312,6 +343,7 @@
         $('.any-app').checked = data.anyApp === true
       }
     } catch { if(ticket!==refreshTicket||disposed)return;data = { state: 'error' }; status.textContent = messages.error }
+    favorites.sync(data, demo)
     paint()
     clearTimeout(timer)
     if (!disposed) timer = setTimeout(refresh, document.hidden ? 10000 : 2000)
@@ -393,6 +425,7 @@
     const label = track.playing ? '暂停' : '播放'
     if (toggle.title !== label) { toggle.title = label; toggle.setAttribute('aria-label', label) }
     shadow.querySelectorAll('[data-action]').forEach(b => { const disabled=demo||busy||seek.busy||seek.dragging;if(b.disabled!==disabled)b.disabled=disabled })
+    paintFavorite()
   }
   // Observe React navigation without reaching into React's internal state.
   const observer = new MutationObserver(mount)
@@ -408,6 +441,8 @@
   }
   window.addEventListener('pagehide', () => {
     disposed = true; clearTimeout(timer); cancelAnimationFrame(frame); observer.disconnect(); followObserver.disconnect(); resize.disconnect(); lyricResize.disconnect()
+    accountUI.dispose()
+    favorites.dispose()
     hideCoverPreview()
     cancelScrub()
     document.removeEventListener('pointermove',moveScrub)
@@ -415,6 +450,7 @@
     document.removeEventListener('pointercancel',cancelPointer)
     window.removeEventListener('blur',cancelScrub)
     window.removeEventListener('resize', hideCoverPreview)
+    window.removeEventListener('resize', fitPanel)
     document.removeEventListener('scroll', hideCoverPreview, true)
     document.fonts?.removeEventListener('loadingdone', onFontsLoaded)
     document.removeEventListener('pointerdown', outside); host.remove()

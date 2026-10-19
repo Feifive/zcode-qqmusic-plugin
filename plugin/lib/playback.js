@@ -149,6 +149,17 @@ export function createPlaybackReporter({ options, log = () => {}, now = () => Da
     if (match === null) return { ...payload, state: 'no-match' }
 
     track.songmid = match.songmid
+    track.songid = match.songid
+    track.songtype = match.songtype || 0
+    // Lyrics can tolerate a fuzzy lookup; a remote playlist mutation cannot.
+    const artistParts = value => String(value || '').split(/;|；| \/ /).map(normalizeName).filter(Boolean)
+    const wantedArtists = artistParts(artist)
+    const matchedArtists = artistParts(match.singer)
+    track.favoriteEligible = /qqmusic/i.test(track.app) && Number.isSafeInteger(match.songid) && match.songid > 0
+      && normalizeTitle(match.name) === normalizeTitle(track.title) && wantedArtists.length > 0
+      && wantedArtists.every(name => matchedArtists.includes(name))
+      && (!track.album || !match.album || normalizeTitle(track.album) === normalizeTitle(match.album))
+      && (!track.durationMs || !match.durationMs || Math.abs(track.durationMs - match.durationMs) <= Math.max(3000, track.durationMs * .02))
     track.albumMid = match.albumMid || ''
     if (!track.artist && match.singer) track.artist = match.singer
 

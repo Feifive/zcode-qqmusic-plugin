@@ -1,5 +1,5 @@
 module.exports = function start({ runtimeDir, rendererPath, settingsDir }) {
-const { app, ipcMain, nativeImage } = require('electron')
+const { app, ipcMain, nativeImage, safeStorage } = require('electron')
 const { execFile } = require('node:child_process')
 const { pathToFileURL, fileURLToPath } = require('node:url')
 const { join } = require('node:path')
@@ -22,6 +22,26 @@ let reporter
 let previousMediaSample = null
 let mediaUtils
 let paletteReader
+let accountSession
+
+function getAccountSession() {
+  accountSession ??= Promise.all([
+    import(pathToFileURL(join(__dirname, 'lib/qq-session.js')).href),
+    import(pathToFileURL(join(__dirname, 'lib/qq-profile.js')).href),
+  ]).then(([{ createQQSession, createSessionStorage }, { createQQProfile }]) => createQQSession({
+    storage: createSessionStorage({ settingsDir, safeStorage }), profile: createQQProfile(),
+  }))
+  return accountSession
+}
+function account(payload) { return getAccountSession().then(session => session.handle(payload)) }
+async function favorite(payload) {
+  if (!enabled) return { status: 'unavailable', liked: null, message: '歌词插件已关闭' }
+  if (!['status', 'set'].includes(payload?.action) || typeof payload.songmid !== 'string' || payload.songmid.length > 64) throw Error('无效的收藏操作')
+  if (payload.action === 'set' && typeof payload.liked !== 'boolean') throw Error('无效的收藏状态')
+  const current = await snapshot()
+  if (!current.track || current.track.songmid !== payload.songmid) throw Error('当前歌曲已变化，请重试')
+  return (await getAccountSession()).favorite(payload, current.track)
+}
 
 function trusted(event) {
   try {
@@ -86,6 +106,10 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('zcode-music:configure', (event, config) => {
     if (!trusted(event)) throw new Error('Untrusted music plugin sender')
+    // Reuse the fixed loader v1 bridge so existing installations can receive
+    // login through an ordinary runtime update without patching ZCode.app.
+    if (config && Object.hasOwn(config, 'account')) return account(config.account)
+    if (config && Object.hasOwn(config, 'favorite')) return favorite(config.favorite)
     if (config?.coverPreview === true) {
       if (!enabled || !showCover || !paletteReader) return {albumMid:null,image:null}
       const albumMid=latest?.track?.albumMid
@@ -136,5 +160,6 @@ app.whenReady().then(() => {
     return result
   })
 }).catch(error => console.error('[zcode-music]', error))
+app.on?.('before-quit', () => { accountSession?.then(session => session.dispose()) })
 
 }

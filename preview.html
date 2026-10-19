@@ -6,5 +6,6 @@ body.dark{background:#181a18;color:#e2e5df;--color-accent:#a9c391;--color-intera
 </style>
 <aside><b>ZCode</b><p>工作空间</p><div>♫ 音乐插件预览</div><p>界面验证 · 本地演示</p></aside>
 <main id="root"><article><h1>让音乐，陪你写下一行灵感。</h1><p>同步歌词就在输入框上方。悬停切换播放控制，点击最右侧 ♪ 打开设置。<br>设置中可切换专辑封面显示，悬停封面约 2 秒查看大图。</p></article><div class="chat-composer-region"><div class="chat-composer-input-surface"><textarea placeholder="描述你想构建的内容…"></textarea><div class="actions"><span>＋　项目上下文　·　默认模型</span><span class="send">↑</span></div></div></div><div class="caption">QQ 音乐歌词插件 · 演示界面</div></main><button class="theme" onclick="document.body.classList.toggle('dark')">切换主题</button>
-<script>let config={enabled:true,anyApp:false};window.zcodeMusic={snapshot:async()=>({state:config.enabled?'idle':'disabled',...config,track:null,lyric:null}),configure:async c=>(config={...config,...c}),control:async()=>({ok:false})}</script><script src="plugin/renderer.js"></script>
+<script src="test/account-preview.js"></script>
+<script>let config={enabled:true,anyApp:false};window.zcodeMusic={snapshot:async()=>({...window.previewFavoriteSnapshot(),...config,...(!config.enabled?{state:'disabled'}:{})}),configure:async c=>c.account?window.previewAccount(c.account):c.favorite?window.previewFavorite(c.favorite):(config={...config,...c}),control:async()=>({ok:false})}</script><script src="plugin/renderer.js"></script>
 </html>

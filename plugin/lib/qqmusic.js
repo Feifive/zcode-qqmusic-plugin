@@ -143,9 +143,12 @@ export async function searchSong({ title, artist, durationMs, album }, options =
   if (!best || bestSimilarity < MIN_MATCH_SCORE) return NOT_FOUND
   return {
     songmid: String(best.songmid),
-    songid: Number.isFinite(Number(best.songid)) ? Number(best.songid) : 0,
+    songid: Number.isSafeInteger(Number(best.songid)) ? Number(best.songid) : 0,
+    songtype: Number.isInteger(Number(best.songtype)) ? Number(best.songtype) : 0,
     albumMid: String(best.albummid ?? best.album?.mid ?? ''),
-    name: String(best.songname ?? ''),
+    album: String(best.albumname ?? best.album?.name ?? ''),
+    durationMs: Math.max(0, Number(best.interval ?? best.duration) || 0) * 1000,
+    name: String(best.songname ?? best.name ?? ''),
     singer: singersOf(best).join(' / '),
   }
 }
