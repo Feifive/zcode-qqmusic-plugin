@@ -97,7 +97,9 @@ export function playerColorsWithMagicColor(color, customHex='') {
 export function paletteForArtwork(artwork, light=true) {
   const fallback = () => ({base:QQ_GREEN,accent:QQ_GREEN,surface:light?'#FFFFFF':'#1E1E1F',player:Array(5).fill(QQ_GREEN)})
   try {
-    const primary=(Array.isArray(artwork?.magicColors)?artwork.magicColors.find(validColor):null)||(validColor(artwork?.pureColor)?artwork.pureColor:null)
+    // QQ's getSongPageColor passes nil — never pureColor — to the palette when
+    // magicColors is empty; pureColor only feeds its background gradient ladder.
+    const primary=Array.isArray(artwork?.magicColors)?artwork.magicColors.find(validColor):null
     // Missing/failed artwork must never enter the nil-to-black grayscale rule.
     if(!primary)return fallback()
     const mapped=mapMagicColor(primary,{light})

@@ -1,3 +1,4 @@
+// Diagnostic comparison only; production thumbnails use native/artwork.m.
 // Average the exact source area covered by each output pixel, including partial
 // edge pixels when the source dimensions are not divisible by the target size.
 // Channel order and premultiplied alpha are preserved for color extraction.
@@ -16,11 +17,4 @@ export function boxAverage(pixels, width, height, size=10) {
     for(let channel=0;channel<4;channel++)output[target+channel]=Math.round(sums[channel]/area)
   }
   return output
-}
-export function detectPixelOrder(redPixel) {
-  if(redPixel?.length===4&&redPixel[1]===0&&redPixel[3]===255){
-    if(redPixel[0]===255&&redPixel[2]===0)return 'rgba'
-    if(redPixel[0]===0&&redPixel[2]===255)return 'bgra'
-  }
-  throw Error('Unrecognized artwork pixel order')
 }

@@ -1,5 +1,6 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
 import {searchSong,normalizeTitle} from '../plugin/lib/qqmusic.js'
 import {createPlaybackReporter} from '../plugin/lib/playback.js'
 const original={songname:'POP/STARS',songmid:'000FTx4w1obE49',songid:219006430,albummid:'003MS9qR3iluHl',albumname:'POP/STARS',interval:191,singer:[{name:'K/DA;Madison Beer;曺薇娟 (MIYEON);Jaira Burns;田小娟 (SOYEON)'}]}
@@ -59,4 +60,16 @@ test('favorites require an accurate QQ recording with safe ID, matching edition,
    assert.equal((await reporter.report(sample(changes))).track.favoriteEligible,false,JSON.stringify(changes))
   }
  } finally {globalThis.fetch=previous}
+})
+
+
+test('current 一棵会开花的树 by 谢春花 resolves its exact 2:56 album rather than Live',async()=>{
+ const {tree}=JSON.parse(readFileSync(new URL('./fixtures/artwork.json',import.meta.url)))
+ const exact={songname:tree.title,songmid:tree.songmid,songid:tree.songid,albumname:tree.album,albummid:tree.albumMid,interval:176,singer:[{name:tree.artist}]}
+ const live={...exact,songname:tree.title+' (Live)',songmid:'0030kxg60IncwM',songid:235067530,albumname:'谢春花·专场',albummid:'0021syht4TgK3R',interval:184}
+ await withSearch([live,exact],async()=>{
+  const match=await searchSong({title:tree.title,artist:tree.artist,album:tree.album,durationMs:tree.durationMs})
+  assert.equal(match.songmid,'000CUTL63LNV46');assert.equal(match.songid,105392885)
+  assert.equal(match.albumMid,tree.albumMid);assert.equal(match.name,'一棵会开花的树');assert.equal(match.singer,'谢春花')
+ })
 })

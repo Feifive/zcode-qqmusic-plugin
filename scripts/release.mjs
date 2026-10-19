@@ -2,16 +2,15 @@ import {readFileSync,writeFileSync,readdirSync,mkdirSync} from 'node:fs'
 import {resolve,join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {createPrivateKey,createPublicKey,sign} from 'node:crypto'
-import {execFileSync} from 'node:child_process'
 import store from '../loader/store.cjs'
+import {buildNativeLibrary} from './lib/native.mjs'
 const root=fileURLToPath(new URL('..',import.meta.url)),out=join(root,'dist')
 mkdirSync(out,{recursive:true})
 const {version}=JSON.parse(readFileSync(join(root,'package.json')))
 const key=createPrivateKey(readFileSync(process.env.ZCODE_MUSIC_SIGNING_KEY_FILE||join(root,'.release-private-key.pem')))
 const publicKey=readFileSync(join(root,'loader/release-key.pem'),'utf8')
 if(createPublicKey(key).export({type:'spki',format:'pem'})!==publicKey)throw Error('Signing key does not match pinned release key')
-execFileSync('/usr/bin/clang',['-O2','-dynamiclib','-arch','arm64','-arch','x86_64','-mmacosx-version-min=12.0','-DZCODE_MUSIC_LIBRARY','-fobjc-arc','-fmodules','-fmodules-cache-path=/tmp/zcode-clang-cache','-framework','AppKit',join(root,'native/now-playing.m'),'-o',join(out,'now-playing-universal.dylib')],{stdio:'inherit'})
-execFileSync('/usr/bin/codesign',['--force','--sign','-',join(out,'now-playing-universal.dylib')],{stdio:'inherit'})
+buildNativeLibrary(join(out,'now-playing-universal.dylib'))
 const files={}
 for(const name of ['main.cjs','renderer.js','renderer.css','lyric-timing.js'])files['plugin/'+name]=readFileSync(join(root,'plugin',name))
 for(const name of readdirSync(join(root,'plugin/lib')))if(name.endsWith('.js'))files['plugin/lib/'+name]=readFileSync(join(root,'plugin/lib',name))

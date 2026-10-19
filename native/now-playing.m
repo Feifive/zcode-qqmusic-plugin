@@ -2,6 +2,8 @@
 #import <dlfcn.h>
 #import <objc/message.h>
 
+int zcode_artwork_thumbnail(void);
+
 // Read system playback metadata in a small, replaceable helper process.
 // Account data and music caches are not accessed.
 typedef void (*GetInfo)(dispatch_queue_t, void (^)(CFDictionaryRef));
@@ -198,6 +200,9 @@ static int read_media(int argc, const char *argv[]) {
 // The exported function never returns: the result callback exits the process.
 __attribute__((visibility("default")))
 void zcode_media_entry(void *context, void *cv) {
+    if (getenv("ZCODE_MUSIC_ACTION") && !strcmp(getenv("ZCODE_MUSIC_ACTION"), "artwork")) {
+        exit(zcode_artwork_thumbnail());
+    }
     const char *args[] = {
         "zcode-music",
         getenv("ZCODE_MUSIC_ACTION") ?: "snapshot",
@@ -207,5 +212,8 @@ void zcode_media_entry(void *context, void *cv) {
     read_media(4, args);
 }
 #else
-int main(int argc, const char *argv[]) { return read_media(argc, argv); }
+int main(int argc, const char *argv[]) {
+    if (argc > 1 && !strcmp(argv[1], "artwork")) return zcode_artwork_thumbnail();
+    return read_media(argc, argv);
+}
 #endif

@@ -82,7 +82,9 @@ async function snapshot() {
     if (showCover || colorMode === 'album') paletteReader ??= Promise.all([
       import(pathToFileURL(join(__dirname, 'lib/artwork.js')).href),
       import(pathToFileURL(join(__dirname, 'lib/native-artwork.js')).href),
-    ]).then(([{createPaletteReader},{createArtworkDecoder}]) => createPaletteReader({decode:createArtworkDecoder(nativeImage)}))
+    ]).then(([{createPaletteReader},{createArtworkDecoder,createImageIOThumbnailer}]) => createPaletteReader({
+      decode:createArtworkDecoder(nativeImage,{thumbnail:createImageIOThumbnailer({reader,helper})}),
+    }))
     const artwork = (showCover || colorMode==='album') ? (await paletteReader).get(result.track?.albumMid) : null
     if (revision !== snapshotRevision) return snapshot()
     latest = { ...result, artworkThumbnail:showCover?artwork?.thumbnail||null:null, artworkColors:colorMode==='album'&&artwork?{magicColors:artwork.magicColors,pureColor:artwork.pureColor}:null, enabled, anyApp: options.anyApp, colorMode, showCover }

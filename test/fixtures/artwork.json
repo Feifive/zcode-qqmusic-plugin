@@ -7,6 +7,60 @@
     "decodedPixels": "qingtian-rgba.deflate",
     "encoding": "zlib compressed RGBA8, top-to-bottom rows, opaque alpha",
     "decoder": "macOS ImageIO, full-size JPEG decoding without resizing",
-    "expectedAccent": "#2DBADE"
+    "expectedAccent": "#2DBADE",
+    "file": "qingtian.jpg",
+    "sha256": "656d2cbf4d819e0eaaf579e0ee3793fd551b0c5056c6aa8ecf499b7fbb13b29f",
+    "imageIO": {
+      "width": 10,
+      "height": 10,
+      "order": "rgba",
+      "pixels": "JjAo/0M2Kf+2pJz/9ezp/+7c0f9oZ2L/AAgJ/xMjIP8DERH/BB0a/4JdR/93VD//2b6x//v3+P//9vP/YGBf/wAJC/8dLy7/Ljs2/xUuKf++fmP/oHBX/+/SxP/59fX/v768/1JUTv8ADBH/RVFR/4+DeP9gVkz/RTUs/3RTQP+ciX7/trW0/w0oJf8XJiP/Mi0l/11aUP9tZF7/Wl9g/wsZFP8bJx7/KjEk/0hORf9SUEH/hXdT/1lMMP9JQi7/GCUj/xEaHP8cKif/Jjoi/2dsSP9ocWT/hHho/7iliP+moof/bm9C/zVLLf8MISX/dHd8/ylCNf90fGf/fX9t/z5DOf87Qzz/cnNi/4+Pb/8vSDP/LEJA/11rcf8RLCr/HzEs/wseHf8VGQ//KCsa/wccHf8XHhv/HzYw/0VjZv8BDRL/AgkL/wkMCv81Oh7/WWIu/0hQNP8JFBX/AAIG/wERD/8URjL/AgkM/wIJDf8HERL/DTIq/0FWKf8rRCz/HDAs/wEEB/8CExH/AzYk/w==",
+      "buckets": [
+        5,
+        14,
+        13,
+        15,
+        19,
+        1,
+        0,
+        0
+      ],
+      "primaryHue": 185.4545454545455,
+      "accent": "#2DBADE",
+      "reference": "CGImageSourceCreateThumbnailAtIndex; byte-identical to sips -s format png -Z 10 on macOS 27.0.1"
+    }
+  },
+  "tree": {
+    "title": "一棵会开花的树",
+    "artist": "谢春花",
+    "album": "谢春花作品选集 (2015)",
+    "albumMid": "001Qp10A3tDOIX",
+    "durationMs": 176000,
+    "file": "tree.jpg",
+    "expectedAccent": "#45C8B8",
+    "url": "https://y.gtimg.cn/music/photo_new/T002R300x300M000001Qp10A3tDOIX.jpg",
+    "sha256": "64b8c7c85ea8d907709292d5d90e60380bd2c8badd002bd24201082ff7a6bc8d",
+    "imageIO": {
+      "width": 10,
+      "height": 10,
+      "order": "rgba",
+      "pixels": "4uLi/+Hh4f/h4eH/4uLi/+Li4v/i4uL/4uLi/+Hh4f/f39//39/f/8XCvv/k4+P/4uLi/+Li4v/j4+P/4+Pj/+Li4v/h4eH/4ODg/97e3v9iZ2H/lZOM/9vZ2P/m5uf/4+Pj/+Tk5P/i4uL/4eHh/9/f3//c3Nz/g46S/36Gh/95enT/wcC9/+Xk5P/a2tv/5OTk/+Dh4f/d3d3/29vb/3SBg/+Rm6H/houO/1hbVf+Fe3L/mYqC/8vKyv/R0ND/3Nzc/9jX1/9ldHX/eomM/3R+f/9eYlz/ODMm/2VcUP+qqaT/2djY/9ra2v/X19f/U2Rk/3CAg/9ndHP/XV9W/zQ2Lf8nMzH/XGBX/5STi//ExcX/vr++/x8yK/9LYmH/Y3Bv/19iXP8UGhP/MDo1/4uPhv+YmZL/vbas/7y1qP98fXX/bnRu/2tyav98fXb/LzUv/1BaWP9td3H/bnVw/6iklv+yrZ3/vLWw/7y0r/+4sav/s62m/46Kgv+HiH//goR6/05YTv9UX1D/IDEf/w==",
+      "buckets": [
+        1,
+        2,
+        3,
+        5,
+        11,
+        0,
+        0,
+        0
+      ],
+      "primaryHue": 177.391304347826,
+      "accent": "#45C8B8",
+      "reference": "CGImageSourceCreateThumbnailAtIndex; byte-identical to sips -s format png -Z 10 on macOS 27.0.1"
+    },
+    "songmid": "000CUTL63LNV46",
+    "songid": 105392885,
+    "verifiedAgainst": "QQ Music current system media session: title + artist + album + 176000ms; QQ song lookup matched this songmid"
   }
 }

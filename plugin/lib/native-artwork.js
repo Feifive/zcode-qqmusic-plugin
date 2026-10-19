@@ -1,36 +1,48 @@
-import { deflateSync } from 'node:zlib'
-import { boxAverage, detectPixelOrder } from './resampling.js'
+import { execFile } from 'node:child_process'
 
-function crc32(bytes) {
-  let crc=0xffffffff
-  for(const byte of bytes){
-    crc^=byte
-    for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0)
+const MAX_BYTES = 2 * 1024 * 1024
+
+export function createImageIOThumbnailer({ reader, helper, run = execFile }) {
+  if (!reader || !helper) throw Error('Missing artwork helper path')
+  let queue = Promise.resolve()
+  return bytes => {
+    if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > MAX_BYTES) return Promise.reject(Error('Invalid artwork input'))
+    // Deduplicate per album in the cache; serialize different albums as well.
+    const job = queue.then(() => new Promise((resolve, reject) => {
+      const child = run('/usr/bin/perl', [reader, helper], {
+        env: { ...process.env, ZCODE_MUSIC_ACTION: 'artwork' }, timeout: 3000, maxBuffer: 8192,
+      }, (error, stdout) => {
+        if (error) { reject(Error('ImageIO artwork thumbnail failed')); return }
+        try {
+          const result = JSON.parse(stdout)
+          const { width, height, pixels } = result
+          if (result.engine !== 'imageio' || result.order !== 'rgba'
+            || ![width, height].every(n => Number.isInteger(n) && n > 0 && n <= 10)
+            || typeof pixels !== 'string' || pixels.length > 536 || !/^[A-Za-z0-9+/]+={0,2}$/.test(pixels)) throw Error()
+          const bitmap = Buffer.from(pixels, 'base64')
+          if (bitmap.length !== width * height * 4 || bitmap.toString('base64') !== pixels) throw Error()
+          resolve({ pixels: bitmap, order: 'rgba', width, height })
+        } catch { reject(Error('Invalid ImageIO artwork thumbnail')) }
+      })
+      child.stdin.on('error', () => reject(Error('ImageIO artwork input failed')))
+      child.stdin.end(bytes)
+    }))
+    queue = job.catch(() => {})
+    return job
   }
-  return (crc^0xffffffff)>>>0
 }
-// Build an opaque red PNG so the decoder can identify its own channel order.
-export function onePixelPNG() {
-  const chunk=(type,data)=>{
-    const body=Buffer.concat([Buffer.from(type),data]),out=Buffer.alloc(data.length+12)
-    out.writeUInt32BE(data.length,0);body.copy(out,4);out.writeUInt32BE(crc32(body),out.length-4)
-    return out
-  }
-  const header=Buffer.alloc(13)
-  header.writeUInt32BE(1,0);header.writeUInt32BE(1,4);header[8]=8;header[9]=6
-  return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('IDAT',deflateSync(Buffer.from([0,255,0,0,255]))),chunk('IEND',Buffer.alloc(0))])
-}
-export function createArtworkDecoder(nativeImage) {
-  let order
-  return bytes=>{
-    order??=detectPixelOrder(nativeImage.createFromBuffer(onePixelPNG()).toBitmap())
-    const image=nativeImage.createFromBuffer(bytes)
-    if(image.isEmpty())throw Error('Invalid cover image')
-    const {width,height}=image.getSize()
+
+export function createArtworkDecoder(nativeImage, { thumbnail } = {}) {
+  if (typeof thumbnail !== 'function') throw Error('Missing ImageIO artwork thumbnailer')
+  return async bytes => {
+    const decoded = await thumbnail(bytes)
+    const image = nativeImage.createFromBuffer(bytes)
+    if (image.isEmpty()) throw Error('Invalid cover image')
+    const { width, height } = image.getSize()
     return {
-      pixels:boxAverage(image.toBitmap(),width,height),order,
-      thumbnail:image.resize({width:40,height:40,quality:'good'}).toDataURL(),
-      preview:{image:image.toDataURL(),width,height},
+      pixels: decoded.pixels, order: decoded.order,
+      thumbnail: image.resize({ width: 40, height: 40, quality: 'good' }).toDataURL(),
+      preview: { image: image.toDataURL(), width, height },
     }
   }
 }

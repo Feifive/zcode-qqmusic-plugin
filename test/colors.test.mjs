@@ -91,9 +91,20 @@ test('album color uses QQ green for pending, missing, failed and malformed artwo
   const palette=paletteForArtwork(artwork,light)
   assert.equal(palette.accent,'#00F168');assert.equal(palette.base,'#00F168');assert.deepEqual(palette.player,Array(5).fill('#00F168'))
  }
- // A successfully decoded grayscale cover remains a real color, not a failure.
- assert.equal(paletteForArtwork({magicColors:[],pureColor:hsv(0,0,1)},true).accent,'#8F8F94')
- assert.equal(paletteForArtwork({magicColors:[],pureColor:hsv(0,0,0)},false).accent,'#666666')
+ // pureColor describes the background gradient, never the song-page palette.
+ for(const pixels of [rgba([255,255,255,100]),rgba([0,0,0,100])]){
+  const artwork=extractMagicColors(pixels,{order:'rgba'})
+  assert.deepEqual(artwork.magicColors,[])
+  for(const light of [true,false]){
+   const palette=paletteForArtwork(artwork,light)
+   assert.equal(palette.accent,'#00F168');assert.equal(palette.base,'#00F168')
+   assert.deepEqual(palette.player,Array(5).fill('#00F168'))
+   assert.equal(palette.surface,light?'#FFFFFF':'#1E1E1F')
+  }
+ }
+ for(const light of [true,false])for(const magicColors of [undefined,[],[null,{h:NaN,s:.6,b:.6}]]){
+  assert.equal(paletteForArtwork({magicColors,pureColor:hsv(30)},light).accent,'#00F168')
+ }
 })
 test('album mapping misses and mapping errors fall back to QQ green without consulting grayscale rules',()=>{
  for(const light of [true,false]){
