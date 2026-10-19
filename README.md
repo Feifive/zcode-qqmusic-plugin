@@ -1,6 +1,6 @@
 # ZCode QQ 音乐歌词插件
 
-在 ZCode 聊天输入框上方显示 QQ 音乐同步歌词。当前 **0.3.8**，适配官方 **ZCode macOS 3.15.3**。
+在 ZCode 聊天输入框上方显示 QQ 音乐同步歌词。当前 **0.3.16**，适配官方 **ZCode macOS 3.15.3**。
 
 [下载安装器](https://github.com/Feifive/zcode-qqmusic-plugin/releases/latest) · [安装说明](INSTALL-OTHER-MAC.md)
 
@@ -54,7 +54,7 @@ ZCode.app 中的固定加载器（首次安装或修复）
                 ↓ 验证签名与文件哈希
 ~/Library/Application Support/ZCode Music/
   active.json                 当前版本 / 上一版本，原子切换
-  versions/0.3.8/             主进程、界面、媒体库与签名清单
+  versions/0.3.16/             主进程、界面、媒体库与签名清单
   settings.json              插件偏好设置
   backups/<官方版本>-<哈希>/   原始官方 ZCode.app
   installation.json          加载器安装记录
