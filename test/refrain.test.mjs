@@ -62,7 +62,9 @@ test('pending refrain requests do not block lyrics, and late replies cannot mark
  const before=globalThis.fetch,jobs=new Map()
  globalThis.fetch=async url=>{
   const u=new URL(url)
-  if(u.pathname.includes('search_')){const title=u.searchParams.get('w').startsWith('A')?'A':'B';return{ok:true,text:async()=>JSON.stringify({data:{song:{list:[{songmid:title,songname:title,singer:[{name:'fixture'}],interval:100}]}}})}}
+  if(u.pathname.includes('musicu.fcg'))return Response.json({code:0,req_0:{code:24001,data:{songID:0}}})
+  if(u.pathname.includes('play_single_song')){const id=Number(u.searchParams.get('songid')),title=id===1?'A':'B';return Response.json({code:0,data:[{songid:id,songmid:title,songname:title,singer:[{name:'fixture'}],interval:100}]})}
+  if(u.pathname.includes('search_')){const title=u.searchParams.get('w').startsWith('A')?'A':'B';return{ok:true,text:async()=>JSON.stringify({data:{song:{list:[{songid:title==='A'?1:2,songmid:title,songname:title,singer:[{name:'fixture'}],interval:100}]}}})}}
   return{ok:true,text:async()=>JSON.stringify({lyric:'[00:00.00]歌词'})}
  }
  try{
@@ -79,7 +81,13 @@ test('pending refrain requests do not block lyrics, and late replies cannot mark
 })
 test('refrain information remains available when the lyric service has no lyrics',async()=>{
  const before=globalThis.fetch
- globalThis.fetch=async url=>({ok:true,text:async()=>new URL(url).pathname.includes('search_')?JSON.stringify({data:{song:{list:[{songmid:'A',songname:'A',singer:[{name:'fixture'}]}]}}}):JSON.stringify({lyric:''})})
+ globalThis.fetch=async url=>{
+  const path=new URL(url).pathname,song={songid:1,songmid:'A',songname:'A',singer:[{name:'fixture'}],interval:100}
+  if(path.includes('musicu.fcg'))return Response.json({code:0,req_0:{code:24001,data:{songID:0}}})
+  if(path.includes('play_single_song'))return Response.json({code:0,data:[song]})
+  if(path.includes('search_'))return Response.json({data:{song:{list:[song]}}})
+  return Response.json({lyric:''})
+ }
  try{
   const reporter=createPlaybackReporter({options:{apps:['qqmusic']},refrainReader:{get:()=>[segment(1,25000)]}})
   const result=await reporter.report({at:Date.now(),sessions:[{app:'com.tencent.QQMusicMac',title:'A',artist:'fixture',status:'paused',duration:100000}]})

@@ -3,9 +3,10 @@
 #import <objc/message.h>
 
 int zcode_artwork_thumbnail(void);
+int zcode_local_song(void);
 
 // Read system playback metadata in a small, replaceable helper process.
-// Account data and music caches are not accessed.
+// The snapshot action does not access account data or music caches.
 typedef void (*GetInfo)(dispatch_queue_t, void (^)(CFDictionaryRef));
 typedef void (*GetPID)(dispatch_queue_t, void (^)(int));
 typedef void (*GetPlaying)(dispatch_queue_t, void (^)(bool));
@@ -203,6 +204,9 @@ void zcode_media_entry(void *context, void *cv) {
     if (getenv("ZCODE_MUSIC_ACTION") && !strcmp(getenv("ZCODE_MUSIC_ACTION"), "artwork")) {
         exit(zcode_artwork_thumbnail());
     }
+    if (getenv("ZCODE_MUSIC_ACTION") && !strcmp(getenv("ZCODE_MUSIC_ACTION"), "local-song")) {
+        exit(zcode_local_song());
+    }
     const char *args[] = {
         "zcode-music",
         getenv("ZCODE_MUSIC_ACTION") ?: "snapshot",
@@ -214,6 +218,7 @@ void zcode_media_entry(void *context, void *cv) {
 #else
 int main(int argc, const char *argv[]) {
     if (argc > 1 && !strcmp(argv[1], "artwork")) return zcode_artwork_thumbnail();
+    if (argc > 1 && !strcmp(argv[1], "local-song")) return zcode_local_song();
     return read_media(argc, argv);
 }
 #endif

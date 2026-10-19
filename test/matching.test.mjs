@@ -32,6 +32,8 @@ test('reporter song cache keeps the original and Remix identities separate',asyn
  const previous=globalThis.fetch;let searches=0
  globalThis.fetch=async url=>{
   const u=new URL(url)
+  if(u.pathname.includes('musicu.fcg'))return Response.json({code:0,req_0:{code:24001,data:{songID:0}}})
+  if(u.pathname.includes('play_single_song'))return Response.json({code:0,data:[original,remix].filter(s=>s.songid===Number(u.searchParams.get('songid')))})
   if(u.pathname.includes('search_')){searches++;return{ok:true,text:async()=>JSON.stringify({data:{song:{list:[remix,instrumental,original]}}})}}
   if(u.pathname.includes('lyric_download'))return{ok:true,text:async()=>'<content><![CDATA[[0,1000]test(0,1000)]]></content>'}
   return{ok:true,text:async()=>JSON.stringify({lyric:'[00:00.00]test'})}
@@ -48,9 +50,13 @@ test('reporter song cache keeps the original and Remix identities separate',asyn
 
 test('favorites require an accurate QQ recording with safe ID, matching edition, artist, album and duration', async () => {
  const previous=globalThis.fetch
- globalThis.fetch=async url=>new URL(url).pathname.includes('search_')
-  ? {ok:true,text:async()=>JSON.stringify({data:{song:{list:[original]}}})}
-  : {ok:true,text:async()=>'<content><![CDATA[[0,1000]test(0,1000)]]></content>'}
+ globalThis.fetch=async url=>{
+  const path=new URL(url).pathname
+  if(path.includes('musicu.fcg'))return Response.json({code:0,req_0:{code:24001,data:{songID:0}}})
+  if(path.includes('play_single_song'))return Response.json({code:0,data:[original]})
+  if(path.includes('search_'))return Response.json({data:{song:{list:[original]}}})
+  return{ok:true,text:async()=>'<content><![CDATA[[0,1000]test(0,1000)]]></content>'}
+ }
  try {
   const reporter=createPlaybackReporter({options:{apps:['qqmusic'],anyApp:true,pollMs:2000},refrainReader:{get:()=>null}})
   const sample=overrides=>({at:Date.now(),sessions:[{app:'com.tencent.QQMusicMac',title:'POP/STARS',artist:'K/DA',duration:191000,album:'POP/STARS',status:'paused',...overrides}]})

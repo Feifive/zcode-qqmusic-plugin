@@ -67,16 +67,20 @@ test('seek IPC does not resume a changed track and reports a rejected play comma
 
 test('favorite IPC validates sender, payload and current song before accessing the account',async()=>{
  const previous=globalThis.fetch
- globalThis.fetch=async url=>new URL(url).pathname.includes('search_')
-  ? {ok:true,text:async()=>JSON.stringify({data:{song:{list:[{songname:'seek test',songmid:'actual-mid',songid:123,singer:[{name:'fixture'}]}]}}})}
-  : {ok:true,text:async()=>'<content><![CDATA[[0,1000]test(0,1000)]]></content>'}
+ globalThis.fetch=async url=>{
+  const path=new URL(url).pathname,song={songname:'seek test',songmid:'actualMid',songid:123,interval:100,singer:[{name:'fixture'}]}
+  if(path.includes('musicu.fcg'))return Response.json({code:0,req_0:{code:24001,data:{songID:0}}})
+  if(path.includes('play_single_song'))return Response.json({code:0,data:[song]})
+  if(path.includes('search_'))return Response.json({data:{song:{list:[song]}}})
+  return{ok:true,text:async()=>'<content><![CDATA[[0,1000]test(0,1000)]]></content>'}
+ }
  try {
   const app=await boot([sample()])
-  assert.throws(()=>app.configure({favorite:{action:'set',songmid:'actual-mid',liked:true}},{senderFrame:{url:'https://example.com'},sender:app.event.sender}),/Untrusted/)
-  for(const favorite of [null,{action:'toggle',songmid:'actual-mid'},{action:'set',songmid:'actual-mid',liked:'yes'}])await assert.rejects(app.configure({favorite}),/无效的收藏/)
+  assert.throws(()=>app.configure({favorite:{action:'set',songmid:'actualMid',liked:true}},{senderFrame:{url:'https://example.com'},sender:app.event.sender}),/Untrusted/)
+  for(const favorite of [null,{action:'toggle',songmid:'actualMid'},{action:'set',songmid:'actualMid',liked:'yes'}])await assert.rejects(app.configure({favorite}),/无效的收藏/)
   assert.equal(app.calls.length,0)
   await assert.rejects(app.configure({favorite:{action:'set',songmid:'old-mid',liked:true}}),/当前歌曲已变化/)
-  assert.equal((await app.configure({favorite:{action:'status',songmid:'actual-mid'},enabled:false})).status,'logged-out')
+  assert.equal((await app.configure({favorite:{action:'status',songmid:'actualMid'},enabled:false})).status,'logged-out')
   assert.equal((await app.snapshot()).enabled,true)
  }finally{globalThis.fetch=previous}
 })

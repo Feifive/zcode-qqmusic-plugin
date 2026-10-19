@@ -22,12 +22,6 @@ const HEADERS = {
 /** Sentinel the resolvers use for "the service answered, but knows nothing". */
 export const NOT_FOUND = null
 
-/**
- * Minimum resemblance for an accepted search hit. An exact title scores 100 and
- * a matching artist 60, so anything below this matched neither.
- */
-const MIN_MATCH_SCORE = 40
-
 async function getText(url, timeoutMs) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -68,47 +62,33 @@ function singersOf(song) {
   return names.flatMap(name => name.split(/[;；]/)).map(name => name.trim()).filter(Boolean)
 }
 
-/**
- * How much a candidate song name resembles the wanted title.
- * 100 = same name, 45 = the candidate carries extra words ("晴天 (Live)"),
- * 30 = the candidate is a shorter fragment of the wanted title (ranking only).
- */
-function nameScore(songName, wantedName) {
-  if (!songName || !wantedName) return 0
-  if (songName === wantedName) return 100
-  const candidateIsLonger = songName.length > wantedName.length
-  const short = candidateIsLonger ? wantedName : songName
-  const long = candidateIsLonger ? songName : wantedName
-  if (short.length < Math.max(2, Math.ceil(long.length * 0.6))) return 0
-  if (!long.includes(short)) return 0
-  return candidateIsLonger ? 45 : 30
+const artistParts = value => String(value ?? '').split(/[;；]|\s+\/\s+/).map(normalizeName).filter(Boolean)
+
+// Version labels stay in the title. Known album/duration fields are hard gates,
+// and a missing candidate field cannot satisfy a known field from the player.
+export function matchesSongMetadata(track, song) {
+  const title = normalizeTitle(track?.title), wantedArtists = artistParts(track?.artist)
+  const artists = artistParts(song?.singer)
+  if (!title || !wantedArtists.length || normalizeTitle(song?.name) !== title
+    || !wantedArtists.every(name => artists.includes(name))) return false
+  if (track.album && (!song.album || normalizeTitle(track.album) !== normalizeTitle(song.album))) return false
+  if (Number.isFinite(track.durationMs) && track.durationMs > 0
+    && (!Number.isFinite(song.durationMs) || song.durationMs <= 0
+      || Math.abs(track.durationMs - song.durationMs) > Math.max(3000, track.durationMs * .02))) return false
+  return true
 }
 
-function scoreCandidate(song, title, artist, index, total, durationMs, album) {
-  const songName = normalizeName(song?.songname ?? song?.name)
-  const wantedName = normalizeName(title)
-  const singers = singersOf(song).map(normalizeName)
-  const wantedArtist = normalizeName(artist)
-
-  const similarity = nameScore(songName, wantedName)
-  let score = similarity + Math.max(0, 10 - index) * 2
-  if (normalizeTitle(song?.songname ?? song?.name) === normalizeTitle(title)) score += 40
-  else if (similarity === 100) score -= 40
-  if (wantedArtist) {
-    const wantedArtists = singersOf({ singer: artist }).map(normalizeName)
-    if (wantedArtists.every(name => singers.includes(name))) score += 60
-    else if (singers.some((name) => name.includes(wantedArtist) || wantedArtist.includes(name))) score += 25
-  }
-  const seconds = Number(song?.interval ?? song?.duration)
-  if (durationMs > 0 && seconds > 0) {
-    const delta = Math.abs(seconds * 1000 - durationMs)
-    if (delta <= 2000) score += 20
-    else if (delta > Math.max(10000, durationMs * .1)) score -= 35
-  }
-  if (album && normalizeTitle(song?.albumname ?? song?.album?.name) === normalizeTitle(album)) score += 10
-  // A slightly later exact match beats an earlier cover.
-  if (total > 0) score -= index / total
-  return { score, similarity }
+export function songFields(song) {
+  if (!song || typeof song !== 'object') return null
+  const rawID = song.songid ?? song.id, songmid = song.songmid ?? song.mid
+  const songid = Number(rawID)
+  if (!['number', 'string'].includes(typeof rawID) || !/^\d{1,16}$/.test(String(rawID))
+    || !Number.isSafeInteger(songid) || songid <= 0 || typeof songmid !== 'string' || !/^[a-zA-Z0-9]{1,64}$/.test(songmid)) return null
+  return { songmid, songid, songtype: Number.isInteger(Number(song.songtype ?? song.type)) ? Number(song.songtype ?? song.type) : 0,
+    albumMid: String(song.albummid ?? song.album?.mid ?? ''), album: String(song.albumname || song.album?.title || song.album?.name || ''),
+    durationMs: Math.max(0, Number(song.interval ?? song.duration) || 0) * 1000,
+    // In song details `name` may omit "(Live)" while `title` retains it.
+    name: String(song.songname || song.title || song.name || ''), singer: singersOf(song).join(' / ') }
 }
 
 /**
@@ -116,6 +96,7 @@ function scoreCandidate(song, title, artist, index, total, durationMs, album) {
  * @returns {Promise<{songmid: string, name: string, singer: string} | null>}
  */
 export async function searchSong({ title, artist, durationMs, album }, options = {}) {
+  if (!String(title ?? '').trim() || !String(artist ?? '').trim()) return NOT_FOUND
   const query = [title, artist].filter((part) => part && String(part).trim()).join(' ').trim()
   if (!query) return NOT_FOUND
   const timeoutMs = options.timeoutMs ?? 7000
@@ -126,31 +107,24 @@ export async function searchSong({ title, artist, durationMs, album }, options =
   const list = body?.data?.song?.list
   if (!Array.isArray(list) || list.length === 0) return NOT_FOUND
 
-  let best = null
-  let bestScore = -Infinity
-  let bestSimilarity = 0
-  list.forEach((song, index) => {
-    if (!song?.songmid) return
-    const ranked = scoreCandidate(song, title, artist, index, list.length, durationMs, album)
-    if (ranked.score > bestScore) {
-      bestScore = ranked.score
-      bestSimilarity = ranked.similarity
-      best = song
-    }
-  })
-  // Search always answers something; below this threshold the "best" result is
-  // unrelated, and showing its lyrics would be worse than showing none.
-  if (!best || bestSimilarity < MIN_MATCH_SCORE) return NOT_FOUND
-  return {
-    songmid: String(best.songmid),
-    songid: Number.isSafeInteger(Number(best.songid)) ? Number(best.songid) : 0,
-    songtype: Number.isInteger(Number(best.songtype)) ? Number(best.songtype) : 0,
-    albumMid: String(best.albummid ?? best.album?.mid ?? ''),
-    album: String(best.albumname ?? best.album?.name ?? ''),
-    durationMs: Math.max(0, Number(best.interval ?? best.duration) || 0) * 1000,
-    name: String(best.songname ?? best.name ?? ''),
-    singer: singersOf(best).join(' / '),
-  }
+  const candidates = list.map(songFields).filter(song => song && matchesSongMetadata({ title, artist, durationMs, album }, song))
+  // Search order is not proof of identity. Distinct IDs still fitting all known
+  // metadata are ambiguous; never pick one just because it ranks first.
+  const identities = new Map(candidates.map(song => [song.songid, song]))
+  return identities.size === 1 ? identities.values().next().value : NOT_FOUND
+}
+
+export function parseLyricText(text) {
+  if (typeof text !== 'string' || !text.trim() || text.length > 1024 * 1024) return null
+  const embedded = /LyricContent\s*=\s*(["'])([\s\S]*?)\1/i.exec(text)
+  const lines = parseQrc(embedded ? embedded[2] : text)
+  if (lines.length) return { offset: 0, kind: 'qrc', lines }
+  const parsed = parseLrc(text)
+  if (!parsed.lines.length) return null
+  return { offset: parsed.offset, kind: 'lrc', lines: parsed.lines.map(([start, value], index) => {
+    const next = parsed.lines[index + 1]
+    return { start, duration: next ? Math.max(0, next[0] - start) : 0, text: value, words: [] }
+  }) }
 }
 
 /**
@@ -180,9 +154,8 @@ export async function fetchWordLyric(songid, options = {}) {
 
   const looksHex = /^[0-9a-fA-F]+$/.test(payload) && payload.length % 2 === 0 && payload.length >= 16
   const text = looksHex ? decryptQrc(payload) : payload
-  const lines = parseQrc(text)
-  if (lines.length === 0) return NOT_FOUND
-  return { offset: 0, kind: 'qrc', lines }
+  const parsed = parseLyricText(text)
+  return parsed?.kind === 'qrc' ? parsed : NOT_FOUND
 }
 
 /**

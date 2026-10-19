@@ -72,7 +72,7 @@
   document.fonts?.ready.then(() => { geometryDirty = true })
   const onFontsLoaded = () => { geometryDirty = true }
   document.fonts?.addEventListener('loadingdone', onFontsLoaded)
-  const messages = { idle: '等待 QQ 音乐播放', starting: '正在连接播放器…', disabled: '歌词插件已关闭', unavailable: '系统播放信息暂时不可用', 'no-match': '未找到匹配歌曲', 'no-lyric': '这首歌暂无歌词', error: '歌词暂时不可用' }
+  const messages = { idle: '等待 QQ 音乐播放', starting: '正在连接播放器…', disabled: '歌词插件已关闭', unavailable: '系统播放信息暂时不可用', 'no-match': '未能确认歌曲版本', 'no-lyric': '这首歌暂无歌词', error: '歌词暂时不可用' }
   const demoData = {
     state: 'playing', sampledAt: Date.now(), enabled: true,
     artworkColors: {magicColors:[{h:166,s:.62,b:.64}],pureColor:{h:166,s:.62,b:.64}},

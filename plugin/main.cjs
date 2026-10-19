@@ -75,8 +75,12 @@ async function snapshot() {
   if (inflight && inflightRevision === snapshotRevision) return inflight
   const revision = snapshotRevision
   const task = (async () => {
-    reporter ??= import(pathToFileURL(join(__dirname, 'lib/playback.js')).href)
-      .then(({ createPlaybackReporter }) => createPlaybackReporter({ options }))
+    reporter ??= Promise.all([
+      import(pathToFileURL(join(__dirname, 'lib/playback.js')).href),
+      import(pathToFileURL(join(__dirname, 'lib/local-song.js')).href),
+    ]).then(([{ createPlaybackReporter }, { createLocalSongReader }]) => createPlaybackReporter({ options,
+      resolveLocalIdentity: process.platform === 'darwin' ? createLocalSongReader({ reader, helper, run: execFile }) : undefined,
+    }))
     const sample = await run(['snapshot'])
     const result = sample.error ? { state: 'unavailable', track: null, lyric: null, error: sample.error } : await (await reporter).report(sample)
     if (showCover || colorMode === 'album') paletteReader ??= Promise.all([

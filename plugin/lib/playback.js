@@ -5,7 +5,8 @@
  * so it can be exercised without a running Harness.
  */
 
-import { fetchLyric, fetchWordLyric, normalizeName, normalizeTitle, searchSong } from './qqmusic.js'
+import { fetchLyric, fetchWordLyric } from './qqmusic.js'
+import { createSongResolver } from './song-match.js'
 import { pickSession, splitTitle } from './nowplaying.js'
 import { createRefrainReader, selectRefrainPoint } from './refrain.js'
 
@@ -16,44 +17,46 @@ const STALE_SAMPLE_MS = 12_000
 const MAX_ENTRIES = 300
 const UNAVAILABLE_ERRORS = new Set(['winrt-unavailable', 'smtc-unavailable', 'powershell-not-found'])
 
-function remember(map, key, value, ttl) {
-  map.set(key, { value, at: Date.now(), ttl })
+function remember(map, key, value, ttl, at) {
+  map.set(key, { value, at, ttl })
   if (map.size > MAX_ENTRIES) {
     const oldest = map.keys().next()
     if (!oldest.done) map.delete(oldest.value)
   }
 }
 
-function recall(map, key) {
+function recall(map, key, at) {
   const entry = map.get(key)
   if (entry === undefined) return undefined
-  if (Date.now() - entry.at > entry.ttl) {
+  if (at - entry.at > entry.ttl) {
     map.delete(key)
     return undefined
   }
   return entry.value
 }
 
-export function createPlaybackReporter({ options, log = () => {}, now = () => Date.now(), refrainReader = createRefrainReader() }) {
+export function createPlaybackReporter({ options, log = () => {}, now = () => Date.now(), refrainReader = createRefrainReader(), resolveIdentity = createSongResolver(), resolveLocalIdentity } = {}) {
   const songs = new Map()
   const lyricBodies = new Map()
   const inflight = new Map()
 
-  function resolveSong(track) {
-    const key = `${normalizeTitle(track.title)}|${normalizeName(track.artist)}|${normalizeTitle(track.album)}|${Math.round((track.durationMs || 0) / 1000)}`
-    const cached = recall(songs, key)
+  function resolveOnlineSong(track) {
+    const key = JSON.stringify([track.app, track.title, track.artist, track.album, track.durationMs])
+    const cached = recall(songs, key, now())
     if (cached !== undefined) return Promise.resolve(cached.songmid ? cached : null)
 
     const pending = inflight.get(key)
     if (pending !== undefined) return pending
 
-    const lookup = searchSong(track)
+    const lookup = resolveIdentity(track)
       .then((match) => {
-        remember(songs, key, match ?? { songmid: '' }, match ? HIT_TTL_MS : MISS_TTL_MS)
-        return match
+        if (match?.lyric?.lines?.length) remember(lyricBodies, match.songmid, match.lyric, LYRIC_TTL_MS, now())
+        const identity = match ? { ...match, lyric: undefined } : null
+        remember(songs, key, identity ?? { songmid: '' }, identity ? HIT_TTL_MS : MISS_TTL_MS, now())
+        return identity
       })
       .catch((error) => {
-        log(`search failed: ${error instanceof Error ? error.message : String(error)}`)
+        log(`song resolution failed: ${error instanceof Error ? error.message : String(error)}`)
         return null
       })
       .finally(() => inflight.delete(key))
@@ -62,10 +65,18 @@ export function createPlaybackReporter({ options, log = () => {}, now = () => Da
     return lookup
   }
 
+  function resolveSong(track) {
+    if (!resolveLocalIdentity) return resolveOnlineSong(track)
+    // Consult the live local cache before the longer-lived online cache: a
+    // previous online miss must not hide a newly imported client record.
+    return Promise.resolve().then(() => resolveLocalIdentity(track))
+      .catch(() => null).then(local => local ?? resolveOnlineSong(track))
+  }
+
   function resolveLyric(match) {
     const songmid = match.songmid
     const key = `lyric:${songmid}`
-    const cached = recall(lyricBodies, songmid)
+    const cached = recall(lyricBodies, songmid, now())
     if (cached !== undefined) return Promise.resolve(cached.lines.length > 0 ? cached : null)
 
     const pending = inflight.get(key)
@@ -90,7 +101,7 @@ export function createPlaybackReporter({ options, log = () => {}, now = () => Da
       return { offset: parsed.offset, kind: 'lrc', lines }
     })()
       .then((parsed) => {
-        remember(lyricBodies, songmid, parsed ?? { offset: 0, kind: 'lrc', lines: [] }, parsed ? LYRIC_TTL_MS : MISS_TTL_MS)
+        remember(lyricBodies, songmid, parsed ?? { offset: 0, kind: 'lrc', lines: [] }, parsed ? LYRIC_TTL_MS : MISS_TTL_MS, now())
         return parsed
       })
       .catch((error) => {
@@ -138,28 +149,18 @@ export function createPlaybackReporter({ options, log = () => {}, now = () => Da
       durationMs: Number.isFinite(session.duration) ? Math.max(0, session.duration) : 0,
       // Offer seeking for a known duration; confirm support from the result.
       seekable: session.seek === true || (Number.isFinite(session.duration) && session.duration > 0),
+      favoriteEligible: false,
     }
     const payload = { ...base, state: playing ? 'playing' : 'paused', track }
 
-    let match = await resolveSong(track)
-    if (match === null && track.artist) {
-      // Some players expose only a title; retry without the artist before giving up.
-      match = await resolveSong({ ...track, artist: '' })
-    }
+    const match = await resolveSong(track)
     if (match === null) return { ...payload, state: 'no-match' }
 
     track.songmid = match.songmid
     track.songid = match.songid
     track.songtype = match.songtype || 0
-    // Lyrics can tolerate a fuzzy lookup; a remote playlist mutation cannot.
-    const artistParts = value => String(value || '').split(/;|；| \/ /).map(normalizeName).filter(Boolean)
-    const wantedArtists = artistParts(artist)
-    const matchedArtists = artistParts(match.singer)
-    track.favoriteEligible = /qqmusic/i.test(track.app) && Number.isSafeInteger(match.songid) && match.songid > 0
-      && normalizeTitle(match.name) === normalizeTitle(track.title) && wantedArtists.length > 0
-      && wantedArtists.every(name => matchedArtists.includes(name))
-      && (!track.album || !match.album || normalizeTitle(track.album) === normalizeTitle(match.album))
-      && (!track.durationMs || !match.durationMs || Math.abs(track.durationMs - match.durationMs) <= Math.max(3000, track.durationMs * .02))
+    track.matchSource = match.matchSource
+    track.favoriteEligible = /qqmusic/i.test(track.app) && match.verified === true && Number.isSafeInteger(match.songid) && match.songid > 0
     track.albumMid = match.albumMid || ''
     if (!track.artist && match.singer) track.artist = match.singer
 

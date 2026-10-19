@@ -7,9 +7,11 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout } from 'node:timers/promises'
 import { createPlaybackReporter } from '../plugin/lib/playback.js'
 import { pickSession } from '../plugin/lib/nowplaying.js'
+import { createLocalSongReader } from '../plugin/lib/local-song.js'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const capture = () => JSON.parse(execFileSync('/usr/bin/perl', [resolve(root, 'dist/reader.pl'), resolve(root, 'dist/now-playing.dylib')], { encoding: 'utf8', timeout: 5000 }))
+const reader = resolve(root, 'native/reader.pl'), helper = resolve(root, 'dist/now-playing-universal.dylib')
+const capture = () => JSON.parse(execFileSync('/usr/bin/perl', [reader, helper], { env: { ...process.env, ZCODE_MUSIC_ACTION: 'snapshot' }, encoding: 'utf8', timeout: 5000 }))
 const first = capture()
 const session = pickSession(first.sessions)
 assert.ok(session, 'No QQ Music session detected. Start playback before running the live test.')
@@ -21,8 +23,11 @@ assert.ok(next, 'QQ Music session disappeared.')
 if (next.title === session.title && next.duration === session.duration && next.position >= session.position) {
   assert.ok(next.position > session.position + 500, 'Playback position did not advance.')
 }
-const reporter = createPlaybackReporter({ options: { apps: ['qqmusic'], anyApp: false, pollMs: 2000 }, log: console.error })
+const reporter = createPlaybackReporter({ options: { apps: ['qqmusic'], anyApp: false, pollMs: 2000 }, log: console.error,
+  resolveLocalIdentity: createLocalSongReader({ reader, helper }) })
 const result = await reporter.report(second)
 assert.equal(result.state, 'playing', `Expected playing with resolved lyrics, got ${result.state}`)
 assert.ok(result.lyric?.lines.length, 'No lyrics resolved for the active song.')
-console.log(JSON.stringify({ state: result.state, title: result.track.title, artist: result.track.artist, positionMs: result.track.positionMs, kind: result.lyric.kind, lines: result.lyric.lines.length, currentLine: result.lyric.lines[result.lyric.index]?.text }, null, 2))
+console.log(JSON.stringify({ state: result.state, title: result.track.title, artist: result.track.artist, matchSource: result.track.matchSource,
+  songid: result.track.songid, songmid: result.track.songmid, albumMid: result.track.albumMid, favoriteEligible: result.track.favoriteEligible,
+  positionMs: result.track.positionMs, kind: result.lyric.kind, lines: result.lyric.lines.length, currentLine: result.lyric.lines[result.lyric.index]?.text }, null, 2))
