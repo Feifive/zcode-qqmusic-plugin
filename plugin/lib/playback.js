@@ -182,7 +182,11 @@ export function createPlaybackReporter({ options, log = () => {}, now = () => Da
     }
   }
 
-  return { report }
+  return { report, cacheStats: () => ({
+    songs: songs.size, lyrics: lyricBodies.size,
+    refrains: refrainReader.cacheSize?.() ?? 0,
+    localSongs: resolveLocalIdentity?.cacheSize?.() ?? 0,
+  }) }
 }
 
 /** Index of the last line whose start time has passed, or -1. */

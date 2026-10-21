@@ -1,0 +1,52 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>整首歌词与点击跳转检查</title>
+<style>
+body{margin:0;padding:28px;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fafbf8;color:#30322e;--color-interaction-ask-foreground:#658857;--color-foreground:#30322e;--color-foreground-subtle:#898c85;--color-surface:#fff;--color-popover:#fff;--color-border:#dfe2dc;--color-hover:#f0f2ed}body.dark{background:#181a18;color:#e2e5df;--color-foreground:#e2e5df;--color-foreground-subtle:#888f83;--color-surface:#252823;--color-popover:#252823;--color-border:#373c33;--color-hover:#34392f}h1{font-size:22px;font-weight:500}button.fixture{padding:7px 12px;border:1px solid var(--color-border);border-radius:6px;color:inherit;background:var(--color-surface);cursor:pointer}output{display:block;white-space:pre-wrap;font:11px ui-monospace,monospace;max-height:110px;overflow:auto;margin:16px 0}.chat-composer-region{max-width:900px;margin:470px auto 0}.chat-composer-input-surface{padding:28px;border:1px solid var(--color-border);border-radius:16px;background:var(--color-surface)}
+</style>
+<h1>整首歌词与点击跳转</h1><p>模拟数据 · 不操作真实播放器。点击歌词条查看整首歌词。</p>
+<button class="fixture" id="run">运行检查</button> <button class="fixture" onclick="document.body.classList.toggle('dark')">切换主题</button>
+<output id="result">等待检查</output><output id="commands">定位命令：0</output>
+<div id="root"><div class="chat-composer-region"><div class="chat-composer-input-surface">输入消息</div></div></div>
+<script>
+const config={enabled:true,colorMode:'theme',showCover:false};let version=1,position=20000,playing=false,fail=false,hasLyrics=true;const commands=[]
+const lines=Array.from({length:80},(_,i)=>({start:i*4000,duration:4000,text:i===7?'这一句很长，换行后也应该完整显示，不应挤压时间标签或超出面板边界。':`第 ${String(i+1).padStart(2,'0')} 句 · 让音乐陪你，把灵感写成代码`,words:[]}))
+const track=()=>({app:'com.tencent.QQMusicMac',title:'让灵感慢慢发生',artist:'本地模拟',album:'专辑 '+version,songmid:'fixture'+version,playing,positionMs:position,durationMs:330000})
+window.zcodeMusic={snapshot:async()=>({state:playing?'playing':'paused',...config,sampledAt:Date.now(),track:track(),lyric:hasLyrics?{mid:'fixture'+version,offset:1200,lines}:null}),configure:async c=>{
+ if(!c.seek){Object.assign(config,c);return{...config}}
+ const key=JSON.parse(c.seek.expectedKey),current=track()
+ commands.push(c.seek);document.querySelector('#commands').textContent='定位命令：'+commands.length+' · '+c.seek.positionMs+'ms'
+ await new Promise(r=>setTimeout(r,150))
+ if(key[1]!==current.songmid||key[4]!==current.album)return{ok:false,error:'track-changed'}
+ if(fail)return{ok:false,error:'seek-not-applied'}
+ position=c.seek.positionMs;playing=true;return{ok:true,verified:true}
+},control:async()=>({ok:false})}
+const wait=ms=>new Promise(r=>setTimeout(r,ms)),shadow=()=>document.querySelector('#zcode-music-plugin').shadowRoot
+document.querySelector('#run').onclick=async()=>{
+ const checks=[],check=(name,pass)=>{checks.push({name,pass:!!pass});if(!pass)throw Error(name)}
+ try{
+  await wait(2200);const s=shadow(),panel=s.querySelector('.full-lyrics'),toggle=s.querySelector('.lyric'),body=s.querySelector('.lyrics-body'),rows=()=>[...s.querySelectorAll('.lyrics-line')]
+  toggle.click();await wait(100)
+  check('展开完整歌词并标记当前行',!panel.hidden&&rows().length===80&&rows()[4].getAttribute('aria-current')==='true'&&toggle.getAttribute('aria-expanded')==='true')
+  const docScroll=window.scrollY;rows()[8].click();rows()[9].click();await wait(250)
+  check('单次定位计入歌词偏移，等待时禁止重复点击',commands.length===1&&commands[0].positionMs===33200&&playing)
+  check('定位后高亮对应行且不滚动聊天页面',rows()[8].getAttribute('aria-current')==='true'&&window.scrollY===docScroll)
+  body.dispatchEvent(new WheelEvent('wheel',{deltaY:300}));body.scrollTop=700
+  const manualTop=body.scrollTop;position=65000;playing=false;await wait(2300)
+  check('手动滚动后暂停跟随',!s.querySelector('.lyrics-follow').hidden&&Math.abs(body.scrollTop-manualTop)<2)
+  s.querySelector('.lyrics-follow').click();await wait(100)
+  const active=s.querySelector('.lyrics-line.current').getBoundingClientRect(),bounds=body.getBoundingClientRect()
+  check('回到当前歌词只滚动面板',s.querySelector('.lyrics-follow').hidden&&active.top>=bounds.top&&active.bottom<=bounds.bottom&&window.scrollY===docScroll)
+  panel.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,composed:true,cancelable:true}));await wait(50)
+  check('Escape 关闭并归还焦点',panel.hidden&&toggle.getAttribute('aria-expanded')==='false'&&s.activeElement===toggle)
+  toggle.click();const stale=rows()[5];version++;position=9000;await wait(2300);const count=commands.length;stale.click()
+  check('同名但不同专辑切换后，旧行不能发送定位',commands.length===count&&rows()[1].getAttribute('aria-current')==='true')
+  fail=true;rows()[4].click();await wait(250)
+  check('失败保留歌词浮层、显示提示并恢复真实高亮',!panel.hidden&&s.querySelector('.lyrics-notice').textContent.includes('定位失败')&&rows()[1].getAttribute('aria-current')==='true')
+  fail=false;hasLyrics=false;await wait(2300)
+  check('无歌词时关闭浮层并禁用入口',panel.hidden&&toggle.disabled)
+  hasLyrics=true;await wait(2300);s.querySelector('.demo').click();toggle.click();await wait(100)
+  check('演示可展开但不能操作播放器',!panel.hidden&&rows().length===4&&rows().every(row=>row.disabled))
+  s.querySelector('.demo').click();await wait(100)
+  document.querySelector('#result').textContent='PASS '+checks.length+' checks\n'+JSON.stringify(checks,null,2)
+ }catch(error){document.querySelector('#result').textContent='FAIL '+error.message+'\n'+JSON.stringify(checks,null,2)}
+}
+</script><script src="../plugin/renderer.js"></script></html>

@@ -42,3 +42,9 @@ test('keyboard positioning clamps to track bounds and stale pending previews do 
  assert.equal(pending.seek.preview(),null);assert.equal(pending.seek.enabled,false)
  complete({ok:true});await done;assert.equal(pending.seek.enabled,true)
 })
+test('seek sends the captured track identity with its target, not a later context',async()=>{
+ const t=track(),calls=[]
+ const seek=createSeekInteraction({getContext:()=>({available:true,track:t}),send:async(...args)=>{calls.push(args);return{ok:true}},onSettled:async()=>{},onFailure:()=>{}})
+ await seek.keyboard(12345)
+ assert.deepEqual(JSON.parse(calls[0][1]),[t.app,null,t.title,t.artist,null,t.durationMs]);assert.equal(calls[0][0],12345)
+})

@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs'
 import {fileURLToPath,pathToFileURL} from 'node:url'
 import {join,resolve} from 'node:path'
 import vm from 'node:vm'
+import {seekIdentity} from '../plugin/lib/seek.js'
 const directory=fileURLToPath(new URL('../plugin',import.meta.url)),renderer='/official/renderer/index.html'
 const sample=(overrides={})=>({at:Date.now(),sessions:[{app:'com.tencent.QQMusicMac',title:'seek test',artist:'fixture',duration:100000,position:40000,reportedPosition:40000,timelineTimestamp:1000,status:'paused',...overrides}]})
 async function boot(queue,saved={enabled:true,colorMode:'theme',showCover:false}){
@@ -62,6 +63,22 @@ test('seek IPC does not resume a changed track and reports a rejected play comma
  const rejected=await boot([sample(),{ok:true,verified:true},sample({position:5000}),{ok:false,error:'command-not-applied'}])
  assert.equal((await rejected.control({action:'seek',positionMs:5000})).error,'playback-not-started')
  assert.deepEqual(rejected.calls.map(c=>c.ZCODE_MUSIC_ACTION),['snapshot','seek','snapshot','play'])
+})
+
+test('guarded seek validates identity and refuses a changed song before issuing a command',async()=>{
+ const expectedKey=seekIdentity({app:'com.tencent.QQMusicMac',songmid:'mid',title:'seek test',artist:'fixture',album:'Album',durationMs:100000})
+ const invalid=await boot([])
+ for(const key of [null,'invalid','[]',JSON.stringify(['app',null,'title','artist','Album',0])])assert.equal((await invalid.configure({seek:{positionMs:5000,expectedKey:key}})).error,'bad-identity')
+ assert.equal(invalid.calls.length,0)
+ for(const change of [{title:'another'},{artist:'another'},{album:'Other'},{duration:100001}]){
+  const changed=await boot([sample({album:'Album',...change})])
+  assert.equal((await changed.configure({seek:{positionMs:5000,expectedKey}})).error,'track-changed')
+  assert.deepEqual(changed.calls.map(c=>c.ZCODE_MUSIC_ACTION),['snapshot'])
+ }
+ const good=await boot([sample({album:'Album'}),{ok:true,verified:true},sample({album:'Album',position:5000,status:'playing'})])
+ assert.equal((await good.configure({seek:{positionMs:5000,expectedKey},enabled:false})).ok,true)
+ assert.deepEqual(good.calls.map(c=>c.ZCODE_MUSIC_ACTION),['snapshot','seek','snapshot'])
+ assert.deepEqual(JSON.parse(good.calls[1].ZCODE_MUSIC_EXPECTED_TRACK),{title:'seek test',artist:'fixture',album:'Album',duration:100000})
 })
 
 

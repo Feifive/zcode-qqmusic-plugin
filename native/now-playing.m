@@ -60,7 +60,7 @@ static void verify_seek(GetInfo getInfo, GetPID getPID, GetPlaying getPlaying, N
                 output(@{@"ok": @NO, @"error": @"player-changed"}); exit(0);
             }
             read_playback(getInfo, getPlaying, ^(NSDictionary *current, BOOL playing) {
-                for (NSString *key in @[@"kMRMediaRemoteNowPlayingInfoTitle", @"kMRMediaRemoteNowPlayingInfoArtist", @"kMRMediaRemoteNowPlayingInfoDuration"]) {
+                for (NSString *key in @[@"kMRMediaRemoteNowPlayingInfoTitle", @"kMRMediaRemoteNowPlayingInfoArtist", @"kMRMediaRemoteNowPlayingInfoAlbum", @"kMRMediaRemoteNowPlayingInfoDuration"]) {
                     if (current.count && ![(current[key] ?: @"") isEqual:(original[key] ?: @"")]) {
                         output(@{@"ok": @NO, @"error": @"track-changed"}); exit(0);
                     }
@@ -118,6 +118,19 @@ static int read_media(int argc, const char *argv[]) {
                     NSString *expected = argc > 2 ? @(argv[2]) : @"com.tencent.QQMusicMac";
                     if (!bundle.length || ![bundle isEqualToString:expected] || !info.count) {
                         output(@{@"ok": @NO, @"error": @"player-changed"}); exit(0);
+                    }
+                    const char *expectedJSON = getenv("ZCODE_MUSIC_EXPECTED_TRACK");
+                    if (expectedJSON && *expectedJSON) {
+                        NSData *data = [@(expectedJSON) dataUsingEncoding:NSUTF8StringEncoding];
+                        id expectedInfo = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                        BOOL same = [expectedInfo isKindOfClass:NSDictionary.class];
+                        for (NSArray *pair in @[@[@"title", @"kMRMediaRemoteNowPlayingInfoTitle"],
+                            @[@"artist", @"kMRMediaRemoteNowPlayingInfoArtist"], @[@"album", @"kMRMediaRemoteNowPlayingInfoAlbum"]]) {
+                            if (same && ![expectedInfo[pair[0]] isEqual:(info[pair[1]] ?: @"")]) same = NO;
+                        }
+                        if (same && (![expectedInfo[@"duration"] isKindOfClass:NSNumber.class]
+                            || fabs([expectedInfo[@"duration"] doubleValue] - [info[@"kMRMediaRemoteNowPlayingInfoDuration"] doubleValue] * 1000) > 1)) same = NO;
+                        if (!same) { output(@{@"ok": @NO, @"error": @"track-changed"}); exit(0); }
                     }
                     NSDictionary *commands = @{@"play": @0, @"pause": @1, @"toggle": @2, @"next": @4, @"prev": @5};
                     NSNumber *command = commands[action];

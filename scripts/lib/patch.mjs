@@ -4,9 +4,10 @@ import {parseAsar,readEntry,patchAsar,hash} from '../asar.mjs'
 export const LOADER_MARKER='zcode-music-loader/main.cjs'
 export function patchLoader(source,projectRoot){
  const archive=parseAsar(source),pkg=JSON.parse(readEntry(archive,'package.json'))
- if(pkg.name!=='@zcode/desktop'||pkg.version!=='3.15.3')throw Error('尚未适配此 ZCode 版本：'+pkg.version)
+ if(pkg.name!=='@zcode/desktop'||!['3.15.3','3.16.2'].includes(pkg.version))throw Error('尚未适配此 ZCode 版本：'+pkg.version)
  const main=readEntry(archive,'out/main/index.js').toString(),preload=readEntry(archive,'out/preload/index.cjs').toString(),html=readEntry(archive,'out/renderer/index.html').toString()
  if(main.includes(LOADER_MARKER)||preload.includes('zcodeMusic'))throw Error('所选应用已包含音乐插件，请使用未修改的官方应用')
+ if(!html.includes('</head>'))throw Error('ZCode 界面入口已改变')
  const assets=archive.header.files.out.files.renderer.files.assets.files
  if(!Object.keys(assets).some(n=>n.startsWith('styles-')&&['chat-composer-input-surface','data-v4-timeline-scroll','data-following'].every(s=>readEntry(archive,'out/renderer/assets/'+n).includes(s))))throw Error('ZCode 界面挂载点已改变')
  const replacements=new Map([

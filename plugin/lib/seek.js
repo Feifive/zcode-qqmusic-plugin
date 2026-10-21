@@ -18,7 +18,7 @@ export function createSeekInteraction({getContext,send,onSettled,onFailure}) {
     const job={...current,position:Math.min(86400000,Math.max(0,Math.min(current.duration,Math.round(position))))}
     pending=job;gesture=null
     let failed=false
-    try{failed=!(await send(job.position))?.ok}catch{failed=true}
+    try{failed=!(await send(job.position,job.key))?.ok}catch{failed=true}
     try{await onSettled()}finally{if(pending===job)pending=null}
     if(failed)onFailure()
   }

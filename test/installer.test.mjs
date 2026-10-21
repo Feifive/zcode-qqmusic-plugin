@@ -19,16 +19,16 @@ function archive(version='3.15.3'){
   ['package.json',Buffer.from(JSON.stringify({name:'@zcode/desktop',version}))],['out/main/index.js',Buffer.from('export default {}')],['out/preload/index.cjs',Buffer.from('// preload')],['out/renderer/index.html',Buffer.from('<head></head>')],['out/renderer/assets/styles-fixture.css',Buffer.from('chat-composer-input-surface data-v4-timeline-scroll data-following')],
  ])).buffer
 }
-function fixture(t){
+function fixture(t,version='3.15.3'){
  const dir=fs.mkdtempSync(join(tmpdir(),'zcode-installer-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}))
  const project=join(dir,'project'),home=join(dir,'home'),root=join(home,'Library/Application Support/ZCode Music'),app=join(dir,'ZCode.app'),asar=join(app,'Contents/Resources/app.asar')
- fs.mkdirSync(dirname(asar),{recursive:true});fs.writeFileSync(asar,archive());fs.mkdirSync(root,{recursive:true});fs.writeFileSync(join(root,'settings.json'),'{"colorMode":"theme"}')
+ fs.mkdirSync(dirname(asar),{recursive:true});fs.writeFileSync(asar,archive(version));fs.mkdirSync(root,{recursive:true});fs.writeFileSync(join(root,'settings.json'),'{"colorMode":"theme"}')
  for(const name of ['loader','plugin/preload.cjs'])fs.cpSync(join(repository,name),join(project,name),{recursive:true})
  const keys=generateKeyPairSync('ed25519'),key=keys.publicKey.export({type:'spki',format:'pem'})
  fs.writeFileSync(join(project,'loader/release-key.pem'),key)
  const required=['package.json','plugin/main.cjs','plugin/renderer.js','plugin/renderer.css','plugin/lyric-timing.js','plugin/lib/colors.js','plugin/lib/color-rules.js','native/reader.pl','native/now-playing.dylib']
  const files=Object.fromEntries(required.map(name=>[name,Buffer.from('fixture:'+name)]))
- const manifest=Buffer.from(JSON.stringify({format:1,version:'1.0.0',loader:1,zcodeVersions:['3.15.3'],files:Object.fromEntries(Object.entries(files).map(([name,b])=>[name,{size:b.length,sha256:hash(b),mode:0o644}]))}))
+ const manifest=Buffer.from(JSON.stringify({format:1,version:'1.0.0',loader:1,zcodeVersions:['3.15.3','3.16.2'],files:Object.fromEntries(Object.entries(files).map(([name,b])=>[name,{size:b.length,sha256:hash(b),mode:0o644}]))}))
  fs.mkdirSync(join(project,'dist'));fs.writeFileSync(join(project,'dist/runtime.json'),JSON.stringify({manifest:manifest.toString('base64'),signature:sign(null,manifest,keys.privateKey).toString('base64'),files:Object.fromEntries(Object.entries(files).map(([name,b])=>[name,b.toString('base64')]))}))
  const source=fs.readFileSync(join(repository,'scripts/manage.mjs'),'utf8').replace(/^import .*\n/gm,'').replace(/^const project=.*\n/m,'const project=fixtureProject\n')
  async function run(command,args=[]){
@@ -54,6 +54,17 @@ test('fresh install, external update and uninstall preserve settings and the mat
  assert.equal((await f.run('install')).status,0);assert.ok(fs.readFileSync(f.asar).equals(installed))
  assert.equal((await f.run('uninstall')).status,0);assert.ok(fs.readFileSync(f.asar).equals(f.original))
  assert.equal(fs.readFileSync(join(f.root,'settings.json'),'utf8'),'{"colorMode":"theme"}')
+})
+test('ZCode 3.16.2 accepts the loader and signed runtime',async t=>{
+ const f=fixture(t,'3.16.2')
+ assert.equal((await f.run('install')).status,0)
+ const installed=fs.readFileSync(f.asar)
+ assert.ok(readEntry(parseAsar(installed),'out/main/index.js').includes(LOADER_MARKER))
+ assert.equal((await f.run('uninstall')).status,0)
+ assert.ok(fs.readFileSync(f.asar).equals(f.original))
+})
+test('unverified ZCode versions remain blocked',()=>{
+ assert.throws(()=>patchLoader(archive('3.16.3'),repository),/尚未适配/)
 })
 test('repair uses only the recorded backup and refuses a backup from another official version',async t=>{
  const f=fixture(t);assert.equal((await f.run('install')).status,0)

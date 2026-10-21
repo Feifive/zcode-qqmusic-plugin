@@ -11,6 +11,7 @@
   const { refrainPosition } = await import(new URL('./lib/refrain.js', scriptURL).href)
   const { accountMarkup, createAccountUI } = await import(new URL('./lib/qq-account-ui.js', scriptURL).href)
   const { createFavoriteState } = await import(new URL('./lib/favorite-ui.js', scriptURL).href)
+  const { fullLyricsMarkup, createFullLyrics, fullLyricsLayout } = await import(new URL('./lib/full-lyrics.js', scriptURL).href)
   const host = document.createElement('div')
   host.id = 'zcode-music-plugin'
   host.hidden = true
@@ -18,7 +19,7 @@
   shadow.innerHTML = `<link rel="stylesheet" href="${new URL('./renderer.css', scriptURL)}">
     <div class="dock" hidden>
       <div class="track"><span class="cover" role="img" aria-label="专辑封面" tabindex="0"><svg viewBox="0 0 20 20" focusable="false"><circle cx="10" cy="10" r="6.5"/><circle cx="10" cy="10" r="1.5"/></svg><img alt="" width="20" height="20" draggable="false" hidden></span><span class="name"></span><span class="meter"><i></i><i></i><i></i></span></div>
-      <div class="lyric"><span></span></div>
+      <button class="lyric" aria-label="查看整首歌词" title="查看整首歌词" aria-expanded="false" aria-controls="music-full-lyrics" disabled><span></span></button>
       <div class="transport"><span class="time"></span><div class="controls">
         <button class="favorite" aria-label="加入我喜欢" title="加入我喜欢" aria-pressed="mixed" disabled><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg></button>
         <button data-action="prev" aria-label="上一首" title="上一首"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 5v14M19 5 9 12l10 7V5Z"/></svg></button>
@@ -29,6 +30,7 @@
     <div class="idle" aria-hidden="true"></div>
     <button class="launcher" title="QQ 音乐歌词设置" aria-label="QQ 音乐歌词设置" aria-expanded="false">♪</button>
     <div class="cover-preview" hidden aria-hidden="true"><img alt=""></div>
+    ${fullLyricsMarkup}
     <section class="panel" hidden aria-label="QQ 音乐歌词设置">
       <header><span>♪ QQ 音乐歌词</span><button class="close" aria-label="关闭设置">×</button></header>
       <p class="status">正在连接播放器…</p>
@@ -39,6 +41,7 @@
       <label><span>配色来源</span><select class="color-mode" aria-label="配色来源"><option value="theme">跟随 ZCode 主题色</option><option value="album" selected>跟随专辑色</option></select></label>
       <button class="demo">预览歌词条</button>
       ${accountMarkup}
+      <div class="cache"><div class="cache-heading"><span>缓存管理</span><button class="clear-cache" type="button">清空音乐缓存</button></div><p class="cache-info" role="status">正在读取缓存…</p><p class="cache-hint">仅清理本次运行的歌曲、歌词、封面和副歌数据；不会退出 QQ 音乐账号或改动设置。</p></div>
       <div class="updates" hidden><div class="update-heading"><span class="version"></span><button class="check-update">检查更新</button></div><p class="update-status" role="status"></p><div class="update-actions"><button class="install-update" hidden>更新并重启</button><button class="restart-update" hidden>重启生效</button><button class="rollback-update" hidden>回退并重启</button></div></div>
       <p class="hint">在 QQ 音乐播放歌曲，歌词将自动出现。仅跟随系统当前播放的媒体会话。</p>
     </section>`
@@ -78,7 +81,7 @@
     artworkColors: {magicColors:[{h:166,s:.62,b:.64}],pureColor:{h:166,s:.62,b:.64}},
     track: { title: '歌词条预览', artist: 'QQ 音乐', songmid:'demo', playing: true, positionMs: 0, durationMs: 32000 },
     refrain: {songmid:'demo',confidence:1,startMs:8000,endMs:16000},
-    lyric: { offset: 0, lines: [
+    lyric: { mid: 'demo', offset: 0, lines: [
       { start: 0, duration: 8000, text: '让音乐陪你，把灵感写成代码', words: [{ text: '让音乐', start: 0, duration: 2200 }, { text: '陪你，', start: 2200, duration: 1400 }, { text: '把灵感', start: 3600, duration: 2000 }, { text: '写成代码', start: 5600, duration: 2400 }] },
       { start: 8000, duration: 8000, text: '一句歌词，一点专注，慢慢向前', words: [] },
       { start: 16000, duration: 8000, text: '这是界面演示，播放器不会被操作', words: [] },
@@ -169,10 +172,32 @@
   const playbackPosition = snapshot => Math.max(0,Math.min(snapshot.track?.durationMs || Infinity,(snapshot.track?.positionMs || 0)+(snapshot.track?.playing?Math.max(0,Date.now()-(snapshot.sampledAt||Date.now())):0)))
   const seek = createSeekInteraction({
     getContext: () => ({track:data.track,available:!demo&&!busy&&!host.hidden&&$('.enabled').checked&&data.state!=='disabled'}),
-    send: position => { refreshTicket++; return api.control('seek',position) },
+    send: (position, expectedKey) => { refreshTicket++; return api.configure({ seek: { positionMs: position, expectedKey } }) },
     onSettled: refresh,
-    onFailure: () => { status.textContent='定位失败，请在 QQ 音乐中操作'; togglePanel(true) },
+    onFailure: () => {
+      if (fullLyrics.open) fullLyrics.fail('定位失败，请重试或在 QQ 音乐中操作')
+      else { status.textContent='定位失败，请在 QQ 音乐中操作'; togglePanel(true) }
+    },
   })
+  const fullLyrics = createFullLyrics({
+    root: $('.full-lyrics'), toggle: viewport,
+    getContext: () => {
+      const snapshot = demo ? demoData : data
+      return { snapshot, demo, position: demo ? (Date.now() - demoStart) % 32000 : seek.preview() ?? playbackPosition(snapshot),
+        available: Boolean(!demo && seek.enabled && snapshot.track?.songmid && snapshot.lyric?.mid === snapshot.track.songmid), busy: seek.busy }
+    },
+    onSeek: async position => { const done = seek.keyboard(position); paint(); await done; paint() },
+    onLayout: fitFullLyrics,
+    beforeOpen: () => { togglePanel(false); hideCoverPreview() },
+  })
+  viewport.onclick = () => fullLyrics.toggle()
+  function fitFullLyrics() {
+    if (!fullLyrics.open) return
+    const layout = fullLyricsLayout({ anchor: dock.getBoundingClientRect(), viewport: { width: innerWidth, height: innerHeight }, origin: host.getBoundingClientRect() })
+    if (!layout) { fullLyrics.close(); return }
+    for (const [key, value] of Object.entries(layout)) $('.full-lyrics').style[key] = `${value}px`
+  }
+  window.addEventListener('resize', fitFullLyrics)
   const progress = $('.progress')
   const refrainMarker = $('.refrain-marker')
   let refrainKey = ''
@@ -216,14 +241,31 @@
   }
   function togglePanel(open = $('.panel').hidden) {
     hideCoverPreview()
+    if (open) fullLyrics.close()
     if (open) fitPanel()
     $('.panel').hidden = !open
     $('.launcher').setAttribute('aria-expanded', String(open))
-    if (open) { updateStatus(); accountUI.open() }
+    if (open) { updateStatus(); updateCacheStatus(); accountUI.open() }
     else accountUI.close()
   }
   function fitPanel() { host.style.setProperty('--music-panel-height', `${Math.max(120, host.getBoundingClientRect().top - 16)}px`) }
   window.addEventListener('resize', fitPanel)
+  let cacheBusy = false
+  const cacheCount = value => Number.isSafeInteger(value) && value >= 0 ? value : 0
+  const cacheSummary = result => `歌曲 ${cacheCount(result?.songs)} · 歌词 ${cacheCount(result?.lyrics)} · 封面 ${cacheCount(result?.artworks)} · 副歌 ${cacheCount(result?.refrains)} · 本地匹配 ${cacheCount(result?.localSongs)}`
+  async function updateCacheStatus(clear = false) {
+    if (cacheBusy) return
+    cacheBusy = true
+    $('.clear-cache').disabled = true
+    $('.cache-info').textContent = clear ? '正在清理音乐缓存…' : '正在读取缓存…'
+    try {
+      const result = await api.configure({ cache: clear ? 'clear' : 'status' })
+      $('.cache-info').textContent = clear ? '已清空，当前歌曲会自动重新获取。' : cacheSummary(result)
+      if (clear) refresh()
+    } catch { $('.cache-info').textContent = clear ? '清理失败，请重试' : '暂时无法读取缓存' }
+    finally { cacheBusy = false; $('.clear-cache').disabled = false }
+  }
+  $('.clear-cache').onclick = () => updateCacheStatus(true)
   let updateBusy = false
   async function updateStatus(action = 'status') {
     if (!api.update || updateBusy) return
@@ -254,8 +296,12 @@
   $('.rollback-update').onclick = () => updateStatus('rollback')
   $('.launcher').onclick = () => togglePanel()
   $('.close').onclick = () => togglePanel(false)
-  shadow.addEventListener('keydown', e => { if (e.key === 'Escape') togglePanel(false) })
-  function outside(e) { if (!e.composedPath().includes(host)) togglePanel(false) }
+  shadow.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return
+    if (fullLyrics.open) { fullLyrics.close(true); e.preventDefault(); e.stopPropagation() }
+    else togglePanel(false)
+  })
+  function outside(e) { if (!e.composedPath().includes(host)) { togglePanel(false); fullLyrics.close() } }
   document.addEventListener('pointerdown', outside)
   async function configure({ keepDemo = false } = {}) {
     configuring++
@@ -303,7 +349,7 @@
     const hidden = !surface || timeline?.getAttribute('data-following') === 'false'
     if (host.hidden === hidden) return
     host.hidden = hidden
-    if (hidden) { cancelScrub();togglePanel(false) }
+    if (hidden) { cancelScrub();togglePanel(false);fullLyrics.close() }
     else { geometryDirty = true; colorCheckAt = 0 }
   }
   const followObserver = new MutationObserver(syncDockVisibility)
@@ -324,6 +370,7 @@
     if (host.parentNode !== next.parentNode || host.nextSibling !== next) next.before(host)
     host.style.width = `${next.getBoundingClientRect().width}px`
     if (!$('.panel').hidden) fitPanel()
+    if (fullLyrics.open) fitFullLyrics()
     followTimeline(next.closest('[data-v4-timeline-scroll="true"]'))
   }
   async function refresh() {
@@ -357,7 +404,7 @@
     dock.hidden = !visible
     $('.idle').hidden = visible
     paintRefrain(visible?snapshot:{})
-    if (!visible) { cancelScrub();hideCoverPreview(); return }
+    if (!visible) { cancelScrub();hideCoverPreview();fullLyrics.close(); return }
     if(pointerId!==null&&!seek.dragging)releasePointer()
     paintCover(snapshot)
     const id = `${demo}:${track.title}:${track.artist}`
@@ -369,6 +416,7 @@
     const position = demo ? (Date.now() - demoStart) % 32000 : seek.preview() ?? playbackPosition(snapshot)
     const time = position - (snapshot.lyric?.offset || 0)
     const lines = snapshot.lyric?.lines || []
+    viewport.disabled = !lines.length
     let index = -1
     for (let i = 0; i < lines.length && lines[i].start <= time; i++) index = i
     const current = lines[index]
@@ -426,11 +474,15 @@
     if (toggle.title !== label) { toggle.title = label; toggle.setAttribute('aria-label', label) }
     shadow.querySelectorAll('[data-action]').forEach(b => { const disabled=demo||busy||seek.busy||seek.dragging;if(b.disabled!==disabled)b.disabled=disabled })
     paintFavorite()
+    fullLyrics.update()
   }
   // Observe React navigation without reaching into React's internal state.
   const observer = new MutationObserver(mount)
   observer.observe(document.getElementById('root') || document.body, { childList: true, subtree: true })
-  const resize = new ResizeObserver(() => { if (surface) host.style.width = `${surface.getBoundingClientRect().width}px` })
+  const resize = new ResizeObserver(() => {
+    if (surface) host.style.width = `${surface.getBoundingClientRect().width}px`
+    if (fullLyrics.open) fitFullLyrics()
+  })
   resize.observe(document.body)
   const lyricResize = new ResizeObserver(() => { geometryDirty = true })
   lyricResize.observe(viewport)
@@ -443,6 +495,7 @@
     disposed = true; clearTimeout(timer); cancelAnimationFrame(frame); observer.disconnect(); followObserver.disconnect(); resize.disconnect(); lyricResize.disconnect()
     accountUI.dispose()
     favorites.dispose()
+    fullLyrics.dispose()
     hideCoverPreview()
     cancelScrub()
     document.removeEventListener('pointermove',moveScrub)
@@ -451,6 +504,7 @@
     window.removeEventListener('blur',cancelScrub)
     window.removeEventListener('resize', hideCoverPreview)
     window.removeEventListener('resize', fitPanel)
+    window.removeEventListener('resize', fitFullLyrics)
     document.removeEventListener('scroll', hideCoverPreview, true)
     document.fonts?.removeEventListener('loadingdone', onFontsLoaded)
     document.removeEventListener('pointerdown', outside); host.remove()

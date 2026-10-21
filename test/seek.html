@@ -5,7 +5,7 @@
 <div id="root"><div class="chat-composer-region"><div class="chat-composer-input-surface">输入消息</div></div></div>
 <script>
 let config={enabled:true,colorMode:'theme',showCover:false},title='进度拖动演示',position=20000,duration=100000,playing=false,fail=false;const commands=[]
-window.zcodeMusic={snapshot:async()=>({state:playing?'playing':'paused',...config,sampledAt:Date.now(),track:{app:'com.tencent.QQMusicMac',title,artist:'本地模拟',positionMs:position,durationMs:duration,playing,seekable:false},lyric:{offset:0,lines:[{start:0,duration:100000,text:'拖动预览，松手后定位',words:[]}]}}),configure:async c=>(config={...config,...c}),control:async(action,target)=>{
+window.zcodeMusic={snapshot:async()=>({state:playing?'playing':'paused',...config,sampledAt:Date.now(),track:{app:'com.tencent.QQMusicMac',title,artist:'本地模拟',positionMs:position,durationMs:duration,playing,seekable:false},lyric:{offset:0,lines:[{start:0,duration:100000,text:'拖动预览，松手后定位',words:[]}]}}),configure:async c=>c.seek?window.zcodeMusic.control('seek',c.seek.positionMs):(config={...config,...c}),control:async(action,target)=>{
  commands.push({action,target});document.querySelector('#calls').textContent='定位命令：'+commands.length+' · '+JSON.stringify(commands.at(-1))
  await new Promise(r=>setTimeout(r,300));if(fail==='throw')throw Error('模拟失败');if(fail)return{ok:false,error:'seek-not-applied'};position=target;playing=true;return{ok:true,verified:true}
 }}

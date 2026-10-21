@@ -40,7 +40,7 @@ export function createPaletteReader({decode,fetchImage=fetchArtwork,now=Date.now
       entry.pending=false;entry.expires=now()+(entry.ok?6*60*60_000:5*60_000)
     })
     return null
-  },preview(albumMid){
+  },cacheSize(){ return cache.size },preview(albumMid){
     return artworkURL(albumMid)?cache.get(albumMid)?.preview||null:null
   }}
 }

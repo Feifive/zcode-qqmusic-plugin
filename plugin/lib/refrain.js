@@ -47,7 +47,7 @@ export async function fetchRefrain(songmid,{fetcher=fetch}={}) {
 // Requests are deduplicated per song and never hold up playback snapshots.
 export function createRefrainReader({fetchInfo=fetchRefrain,now=Date.now}={}) {
   const cache=new Map()
-  return{get(songmid){
+  return{cacheSize(){ return cache.size },get(songmid){
     if(!validMid(songmid))return null
     const old=cache.get(songmid)
     if(old&&(old.pending||now()<old.expires))return old.result

@@ -58,3 +58,13 @@ test('cover preview requests are read-only and cannot modify settings',async()=>
  assert.equal(app.saved(),before)
  assert.equal((await app.snapshot()).showCover,false)
 })
+test('cache status and clear do not change preferences or account settings',async()=>{
+ const app=await boot('{"enabled":false,"colorMode":"theme","showCover":false}')
+ const before=app.saved()
+ const empty={songs:0,lyrics:0,refrains:0,localSongs:0,artworks:0}
+ assert.deepEqual(JSON.parse(JSON.stringify(await app.configure({cache:'status',enabled:true}))),empty)
+ assert.deepEqual(JSON.parse(JSON.stringify(app.configure({cache:'clear',enabled:true}))),empty)
+ assert.equal(app.saved(),before)
+ assert.equal((await app.snapshot()).state,'disabled')
+ assert.throws(()=>app.configure({cache:'delete-all'}),/无效的缓存操作/)
+})

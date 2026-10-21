@@ -54,7 +54,7 @@ function run(args = []) {
   return new Promise(resolve => {
     execFile('/usr/bin/perl', [reader, helper], {
       timeout: 4500, maxBuffer: 64 * 1024,
-      env: { ...process.env, ZCODE_MUSIC_ACTION: args[0] || 'snapshot', ZCODE_MUSIC_PLAYER: args[1] || 'com.tencent.QQMusicMac', ZCODE_MUSIC_POSITION: args[2] || '0' },
+      env: { ...process.env, ZCODE_MUSIC_ACTION: args[0] || 'snapshot', ZCODE_MUSIC_PLAYER: args[1] || 'com.tencent.QQMusicMac', ZCODE_MUSIC_POSITION: args[2] || '0', ZCODE_MUSIC_EXPECTED_TRACK: args[3] || '' },
     }, async (error, stdout) => {
       try {
         let result = JSON.parse(stdout)
@@ -98,6 +98,72 @@ async function snapshot() {
   inflight = task; inflightRevision = revision
   return task
 }
+async function cacheStatus() {
+  const [music, artwork] = await Promise.allSettled([
+    reporter ? reporter.then(value => value.cacheStats()) : Promise.resolve(null),
+    paletteReader ? paletteReader.then(value => value.cacheSize()) : Promise.resolve(0),
+  ])
+  return {
+    songs: music.status === 'fulfilled' ? music.value?.songs ?? 0 : 0,
+    lyrics: music.status === 'fulfilled' ? music.value?.lyrics ?? 0 : 0,
+    refrains: music.status === 'fulfilled' ? music.value?.refrains ?? 0 : 0,
+    localSongs: music.status === 'fulfilled' ? music.value?.localSongs ?? 0 : 0,
+    artworks: artwork.status === 'fulfilled' ? artwork.value : 0,
+  }
+}
+function clearCache() {
+  snapshotRevision++
+  latest = null
+  inflight = null
+  reporter = null
+  paletteReader = null
+  return { songs: 0, lyrics: 0, refrains: 0, localSongs: 0, artworks: 0 }
+}
+async function control(payload, expectedKey) {
+  if (!enabled) return { ok: false, error: 'disabled' }
+  if (!['toggle', 'next', 'prev', 'seek'].includes(payload?.action)) return { ok: false, error: 'bad-action' }
+  if (payload.action === 'seek' && (!Number.isFinite(payload.positionMs) || payload.positionMs < 0 || payload.positionMs > 86400000)) return { ok: false, error: 'bad-position' }
+  let expected = null
+  if (expectedKey !== undefined) {
+    try {
+      if (typeof expectedKey !== 'string' || expectedKey.length > 32768) throw Error()
+      expected = JSON.parse(expectedKey)
+      if (!Array.isArray(expected) || expected.length !== 6
+        || ![expected[0], expected[2], expected[3], expected[4]].every(value => typeof value === 'string' && value.length <= 1024)
+        || !Number.isFinite(expected[5]) || expected[5] <= 0 || expected[5] > 86400000) throw Error()
+    } catch { return { ok: false, error: 'bad-identity' } }
+  }
+  const { pickSession, splitTitle } = await import(pathToFileURL(join(__dirname, 'lib/nowplaying.js')).href)
+  const sample = await run(['snapshot'])
+  const session = pickSession(sample.sessions, options)
+  if (!session) return { ok: false, error: 'no-player' }
+  const named = splitTitle(session.title, session.artist)
+  if (expected && (expected[0] !== session.app || expected[2] !== named.title || expected[3] !== named.artist
+    || expected[4] !== String(session.album || '') || expected[5] !== session.duration)) return { ok: false, error: 'track-changed' }
+  const action = payload.action === 'toggle' ? (session.status === 'playing' ? 'pause' : 'play') : payload.action
+  const position = payload.action === 'seek' ? Math.min(Math.round(payload.positionMs), Number.isFinite(session.duration) && session.duration > 0 ? Math.round(session.duration) : 86400000) : undefined
+  const expectedRaw = payload.action === 'seek' ? JSON.stringify({ title: session.title || '', artist: session.artist || '', album: session.album || '', duration: session.duration || 0 }) : ''
+  let result = await run([action, session.app, position === undefined ? '0' : String(position), expectedRaw])
+  snapshotRevision++
+  latest = null
+  if (result.ok) {
+    if (payload.action === 'seek') previousMediaSample = null
+    const confirmed = await run(['snapshot'])
+    if (payload.action === 'seek') {
+      const current = confirmed.sessions?.find(s => s.app === session.app)
+      if (!current || current.title !== session.title || current.artist !== session.artist
+        || current.album !== session.album || current.duration !== session.duration) result = { ok: false, error: 'player-changed' }
+      else if (current.status !== 'playing') {
+        const resumed = await run(['play', session.app, '0', expectedRaw])
+        if (!resumed.ok) result = { ok: false, error: 'playback-not-started' }
+        else await run(['snapshot'])
+      }
+    }
+  }
+  snapshotRevision++
+  latest = null
+  return result
+}
 app.whenReady().then(() => {
   try {
     const saved = JSON.parse(readFileSync(settingsFile, 'utf8'))
@@ -116,6 +182,15 @@ app.whenReady().then(() => {
     // login through an ordinary runtime update without patching ZCode.app.
     if (config && Object.hasOwn(config, 'account')) return account(config.account)
     if (config && Object.hasOwn(config, 'favorite')) return favorite(config.favorite)
+    if (config && Object.hasOwn(config, 'cache')) {
+      if (config.cache === 'status') return cacheStatus()
+      if (config.cache === 'clear') return clearCache()
+      throw Error('无效的缓存操作')
+    }
+    if (config && Object.hasOwn(config, 'seek')) {
+      if (typeof config.seek?.expectedKey !== 'string') return { ok: false, error: 'bad-identity' }
+      return control({ action: 'seek', positionMs: config.seek.positionMs }, config.seek.expectedKey)
+    }
     if (config?.coverPreview === true) {
       if (!enabled || !showCover || !paletteReader) return {albumMid:null,image:null}
       const albumMid=latest?.track?.albumMid
@@ -134,36 +209,7 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('zcode-music:control', async (event, payload) => {
     if (!trusted(event)) throw new Error('Untrusted music plugin sender')
-    if (!enabled) return { ok: false, error: 'disabled' }
-    if (!['toggle', 'next', 'prev', 'seek'].includes(payload?.action)) return { ok: false, error: 'bad-action' }
-    if (payload.action === 'seek' && (!Number.isFinite(payload.positionMs) || payload.positionMs < 0 || payload.positionMs > 86400000)) return { ok: false, error: 'bad-position' }
-    const { pickSession } = await import(pathToFileURL(join(__dirname, 'lib/nowplaying.js')).href)
-    const sample = await run(['snapshot'])
-    const session = pickSession(sample.sessions, options)
-    if (!session) return { ok: false, error: 'no-player' }
-    const action = payload.action === 'toggle' ? (session.status === 'playing' ? 'pause' : 'play') : payload.action
-    const position = payload.action === 'seek' ? Math.min(Math.round(payload.positionMs), Number.isFinite(session.duration) && session.duration > 0 ? Math.round(session.duration) : 86400000) : undefined
-    let result = await run([action, session.app, position === undefined ? '0' : String(position)])
-    snapshotRevision++
-    latest = null
-    // Read the confirmed post-command state now, so the next UI refresh does
-    // not wait for the normal poll and can preserve the paused playhead.
-    if (result.ok) {
-      if (payload.action === 'seek') previousMediaSample = null
-      const confirmed = await run(['snapshot'])
-      if (payload.action === 'seek') {
-        const current = confirmed.sessions?.find(s => s.app === session.app)
-        if (!current || current.title !== session.title || current.artist !== session.artist) result = {ok:false,error:'player-changed'}
-        else if (current.status !== 'playing') {
-          const resumed = await run(['play', session.app])
-          if (!resumed.ok) result = {ok:false,error:'playback-not-started'}
-          else await run(['snapshot'])
-        }
-      }
-    }
-    snapshotRevision++
-    latest = null
-    return result
+    return control(payload)
   })
 }).catch(error => console.error('[zcode-music]', error))
 app.on?.('before-quit', () => { accountSession?.then(session => session.dispose()) })

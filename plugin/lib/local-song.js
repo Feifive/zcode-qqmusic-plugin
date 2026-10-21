@@ -79,7 +79,7 @@ export function createLocalSongReader({ reader, helper, run = execFile, stat = f
       } catch { resolve(null) }
     })
   }
-  return async track => {
+  const resolve = async track => {
     if (!usableTrack(track)) return null
     const signature = await fingerprint()
     if (signature === null) { cached = null; return null }
@@ -97,4 +97,6 @@ export function createLocalSongReader({ reader, helper, run = execFile, stat = f
     try { return selectLocalSong(track, await task) }
     finally { if (pending === job) pending = null }
   }
+  resolve.cacheSize = () => Number(cached !== null)
+  return resolve
 }
